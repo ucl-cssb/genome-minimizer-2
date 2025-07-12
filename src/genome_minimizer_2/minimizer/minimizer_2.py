@@ -203,7 +203,7 @@ class GenomeMinimiser:
             plt.legend(handles=handles)
             
             # Create figures directory if it doesn't exist
-            figures_dir = os.path.join(PROJECT_ROOT, " src/genome_minimizer_2/minimizers/generated_genomes")
+            figures_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
             os.makedirs(figures_dir, exist_ok=True)
             
             plt.savefig(
