@@ -10,9 +10,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
-import logging
+from collections import defaultdict
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+from src.genome_minimizer_2.utils.directories import (
+    PROJECT_ROOT
+)
 
 class GenomeMinimiser:
     '''
@@ -98,7 +100,8 @@ class GenomeMinimiser:
         '''
         try:
             # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            output_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
+            os.makedirs(output_dir, exist_ok=True)
             
             with open(file_path, "w") as output_file:
                 output_file.write(f">Minimized_E_coli_K12_MG1655_{self.idx+1}\n")
@@ -152,25 +155,46 @@ class GenomeMinimiser:
         present_genes (list): a list of lists containing the needed genes
         '''
         try:
-            logging.info(f"Attempting to load genes file from {file_path}")
+            logging.info(f"Loading genes file: {os.path.basename(file_path)}")
+            
+            # File validation
             if not os.path.isfile(file_path):
                 raise FileNotFoundError(f"The file {file_path} does not exist.")
             
             if not file_path.endswith(".npy"):
-                raise ValueError(f"The file {file_path} could not be read.\nEnsure the file holds numpy format.")
+                raise ValueError(f"Invalid file format. Expected .npy file, got: {os.path.splitext(file_path)[1]}")
             
-            present_genes = np.load(file_path, allow_pickle=True).tolist()
-            logging.info(f"✓ Successfully loaded gene file from {file_path}")
+            file_size_mb = os.path.getsize(file_path) / (1024**2)
+            if file_size_mb > 10:  
+                logging.info(f"File size: {file_size_mb:.2f} MB")
+            
+            # Load the numpy array
+            logging.info(f"Loading gene data from numpy array...")
+            genes_array = np.load(file_path, allow_pickle=True)
+            
+            # Get array info
+            total_samples = len(genes_array)
+            
+            # Convert to list
+            logging.info(f"Converting {total_samples} samples to list format...")
+            present_genes = genes_array.tolist()
+            
+            sample_genes_count = len(present_genes[0]) if present_genes else 0
+            logging.info(f"✓ Successfully loaded {total_samples} samples ({sample_genes_count} genes per sample)")
+            
             return present_genes
-        
+            
         except FileNotFoundError as fnf_error:
-            logging.error(f"\n✗ Error: {fnf_error}")
+            logging.error(f"✗ File not found: {fnf_error}")
             raise
         except ValueError as val_error:
-            logging.error(f"\n✗ Error: {val_error}")
+            logging.error(f"✗ Invalid file format: {val_error}")
             raise
+        except np.core._exceptions._ArrayMemoryError:
+            logging.error(f"✗ Not enough memory to load file: {file_path}")
+            raise MemoryError(f"Insufficient memory to load {file_path}")
         except Exception as e:
-            logging.error(f"\n✗ Error: {e}.\nAn unexpected error occurred.")
+            logging.error(f"✗ Unexpected error loading genes: {e}")
             raise
 
     def plot(self):
@@ -183,8 +207,8 @@ class GenomeMinimiser:
             min_value = np.min(self.minimised_genomes_sizes)
             max_value = np.max(self.minimised_genomes_sizes)
             
-            plt.figure(figsize=(8, 6))
-            plt.hist(self.minimised_genomes_sizes, bins=10, color="dodgerblue", alpha=0.7)
+            plt.figure(figsize=(4, 4))
+            plt.hist(self.minimised_genomes_sizes, bins=10, color="dodgerblue")
             plt.xlabel("Genome size (Mbp)")
             plt.ylabel("Frequency")
             plt.title("Distribution of Minimized Genome Sizes")
@@ -203,11 +227,11 @@ class GenomeMinimiser:
             plt.legend(handles=handles)
             
             # Create figures directory if it doesn't exist
-            figures_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
-            os.makedirs(figures_dir, exist_ok=True)
+            output_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
+            os.makedirs(output_dir, exist_ok=True)
             
             plt.savefig(
-                os.path.join(figures_dir, f"minimised_genomes_distribution_{self.model_name}.pdf"), 
+                os.path.join(output_dir, f"minimised_genomes_distribution_{self.model_name}.pdf"), 
                 format="pdf", 
                 bbox_inches="tight"
             )
@@ -244,8 +268,6 @@ def check_sequence_duplicates(sequences_dict: dict) -> dict:
     Returns:
     dict: Statistics about duplicates
     """
-    from collections import defaultdict
-    
     sequence_groups = defaultdict(list)
     
     # Group sequences by their content
@@ -309,6 +331,107 @@ def print_duplicate_statistics(duplicate_stats: dict):
     print("="*80)
 
 
+def generate_summary_file(output_file: str, model_name: str, genome_path: str, genes_path: str, 
+                         original_length: int, sequences_dict: dict, minimised_sizes: list, 
+                         duplicate_stats: dict):
+    '''
+    Generate comprehensive summary text file
+    '''
+    try:
+        output_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
+        os.makedirs(output_dir, exist_ok=True)
+        summary_filename = os.path.basename(output_file).replace('.fasta', '_summary.txt')
+        summary_file = os.path.join(output_dir, summary_filename)
+        
+        logging.info(f"Generating summary file: {os.path.basename(summary_file)}")
+        
+        # Calculate statistics
+        total_processed = len(minimised_sizes)
+        mean_size_mbp = np.mean(minimised_sizes) if minimised_sizes else 0
+        median_size_mbp = np.median(minimised_sizes) if minimised_sizes else 0
+        min_size_mbp = np.min(minimised_sizes) if minimised_sizes else 0
+        max_size_mbp = np.max(minimised_sizes) if minimised_sizes else 0
+        std_size_mbp = np.std(minimised_sizes) if minimised_sizes else 0
+        
+        with open(summary_file, 'w') as f:
+            # Header
+            f.write("="*80 + "\n")
+            f.write("GENOME MINIMIZATION SUMMARY REPORT\n")
+            f.write("="*80 + "\n\n")
+            
+            # Generation info
+            f.write("GENERATION INFORMATION\n")
+            f.write("-" * 40 + "\n")
+            f.write(f"Model Name: {model_name}\n")
+            f.write(f"Generated on: {np.datetime64('now')}\n")
+            f.write(f"Output FASTA file: {os.path.basename(output_file)}\n")
+            f.write(f"Summary file: {os.path.basename(summary_file)}\n\n")
+            
+            # Input files
+            f.write("INPUT FILES\n")
+            f.write("-" * 40 + "\n")
+            f.write(f"Genome template: {os.path.basename(genome_path)}\n")
+            f.write(f"Gene lists file: {os.path.basename(genes_path)}\n")
+            f.write(f"Original genome length: {original_length:,} bp\n\n")
+            
+            # Processing statistics
+            f.write("PROCESSING STATISTICS\n")
+            f.write("-" * 40 + "\n")
+            f.write(f"Successfully processed: {total_processed:,}\n\n")
+            
+            # Size statistics
+            f.write("MINIMIZED GENOME SIZE STATISTICS\n")
+            f.write("-" * 40 + "\n")
+            f.write(f"Mean size: {mean_size_mbp:.3f} Mbp ({mean_size_mbp*1e6:,.0f} bp)\n")
+            f.write(f"Median size: {median_size_mbp:.3f} Mbp ({median_size_mbp*1e6:,.0f} bp)\n")
+            f.write(f"Minimum size: {min_size_mbp:.3f} Mbp ({min_size_mbp*1e6:,.0f} bp)\n")
+            f.write(f"Maximum size: {max_size_mbp:.3f} Mbp ({max_size_mbp*1e6:,.0f} bp)\n")
+            f.write(f"Standard deviation: {std_size_mbp:.3f} Mbp\n")
+            f.write(f"Size range: {max_size_mbp - min_size_mbp:.3f} Mbp\n\n")
+            
+            # Reduction statistics
+            if original_length > 0:
+                mean_reduction = ((original_length - mean_size_mbp*1e6) / original_length) * 100
+                min_reduction = ((original_length - max_size_mbp*1e6) / original_length) * 100
+                max_reduction = ((original_length - min_size_mbp*1e6) / original_length) * 100
+                
+                f.write("GENOME REDUCTION STATISTICS\n")
+                f.write("-" * 40 + "\n")
+                f.write(f"Mean reduction: {mean_reduction:.2f}%\n")
+                f.write(f"Minimum reduction: {min_reduction:.2f}% (largest genome)\n")
+                f.write(f"Maximum reduction: {max_reduction:.2f}% (smallest genome)\n\n")
+            
+            # Duplicate analysis
+            f.write("SEQUENCE DUPLICATION ANALYSIS\n")
+            f.write("-" * 40 + "\n")
+            f.write(f"Total sequences: {duplicate_stats['total_sequences']:,}\n")
+            f.write(f"Unique sequences: {duplicate_stats['unique_sequences']:,}\n")
+            f.write(f"Duplicate groups: {duplicate_stats['duplicate_groups']:,}\n")
+            f.write(f"Sequences with duplicates: {duplicate_stats['duplicated_sequences']:,}\n")
+            f.write(f"Uniqueness ratio: {duplicate_stats['compression_ratio']:.2%}\n")
+            
+            # Size distribution
+            if minimised_sizes:
+                f.write(f"\nSIZE DISTRIBUTION SUMMARY\n")
+                f.write("-" * 40 + "\n")
+                
+                # Create size bins
+                size_bins = np.linspace(min_size_mbp, max_size_mbp, 6)
+                hist, _ = np.histogram(minimised_sizes, bins=size_bins)
+                
+                for i in range(len(hist)):
+                    bin_start = size_bins[i]
+                    bin_end = size_bins[i+1]
+                    count = hist[i]
+                    percentage = (count / len(minimised_sizes)) * 100
+                    f.write(f"{bin_start:.2f} - {bin_end:.2f} Mbp: {count:,} genomes ({percentage:.1f}%)\n")
+        
+        logging.info(f"✓ Summary file saved: {summary_file}")
+        
+    except Exception as e:
+        logging.error(f"✗ Failed to generate summary file: {e}")
+
+
 def process_multiple_genomes_single_file(genome_path: str, genes_path: str, model_name: str, output_file: str):
     '''
     Process multiple genome minimizations and save to a single FASTA file
@@ -326,8 +449,19 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
         output_file = "minimized_genomes.fasta"
 
     try:
-        # Load the gene lists
-        present_genes = np.load(genes_path, allow_pickle=True).tolist()
+        # Load genome template once
+        logging.info(f"Loading genome template: {os.path.basename(genome_path)}")
+        genome_record = SeqIO.read(genome_path, "genbank")
+        original_length = len(genome_record.seq)
+        logging.info(f"✓ Loaded genome template ({original_length:,} bp)")
+        
+        # Load all gene lists once
+        logging.info(f"Loading gene lists: {os.path.basename(genes_path)}")
+        genes_array = np.load(genes_path, allow_pickle=True)
+        present_genes = genes_array.tolist()
+        total_samples = len(present_genes)
+        sample_genes_count = len(present_genes[0]) if present_genes else 0
+        logging.info(f"✓ Loaded {total_samples} gene lists ({sample_genes_count} genes per list)")
         
         minimised_genomes_sizes = []
         sequences_dict = {}
@@ -337,34 +471,57 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
         
         # Open single output file
         with open(output_file, 'w') as outfile:
-            outfile.write(f"Num. Minimized genomes generated using model: {model_name}\n")
-            outfile.write(f"Num. Total genomes: {len(present_genes)}\n")
-            outfile.write(f"Num. Generated on: {np.datetime64('now')}\n")
+            outfile.write(f"# Minimized genomes generated using model: {model_name}\n")
+            outfile.write(f"# Total genomes: {len(present_genes)}\n")
+            outfile.write(f"# Generated on: {np.datetime64('now')}\n")
             
             for idx in range(len(present_genes)):
                 try:
-                    minimiser = GenomeMinimiser(genome_path, genes_path, idx, model_name)
+                    needed_genes = present_genes[idx]
+                    
+                    # Find non-essential genes
+                    non_essential_features = []
+                    for feature in genome_record.features:
+                        if feature.type == "gene":
+                            gene_name = feature.qualifiers.get("gene", [""])[0]
+                            if gene_name not in needed_genes:
+                                non_essential_features.append(feature)
+                    
+                    # Get positions to remove
+                    positions_to_remove = set()
+                    for feature in non_essential_features:
+                        start_position = int(feature.location.start)
+                        end_position = int(feature.location.end)
+                        positions_to_remove.update(range(start_position, end_position))
+                    
+                    # Create minimized sequence
+                    reduced_genome = []
+                    for i, base in enumerate(genome_record.seq):
+                        if i not in positions_to_remove:
+                            reduced_genome.append(base)
+                    reduced_genome_str = ''.join(reduced_genome)
                     
                     # Save to the single file
                     sequence_id = f"Minimized_E_coli_K12_MG1655_{idx+1}"
                     outfile.write(f">{sequence_id}\n")
-                    outfile.write(f"{minimiser.reduced_genome_str}\n")
+                    outfile.write(f"{reduced_genome_str}\n")
                     
                     # Store sequence for duplicate checking
-                    sequences_dict[sequence_id] = minimiser.reduced_genome_str
+                    sequences_dict[sequence_id] = reduced_genome_str
                     
-                    # Get statistics
-                    stats = minimiser.get_reduction_stats()
+                    # Calculate statistics
+                    reduced_length = len(reduced_genome_str)
+                    reduction_percentage = ((original_length - reduced_length) / original_length) * 100
                     
                     if (idx + 1) % 100 == 0 or idx < 10:  # Show progress for first 10 and every 100
                         print(f"Processed {idx+1}/{len(present_genes)}: "
-                              f"{stats['reduced_length']:,} bp "
-                              f"({stats['reduction_percentage']:.1f}% reduction)")
+                              f"{reduced_length:,} bp "
+                              f"({reduction_percentage:.1f}% reduction)")
                     
-                    minimised_genomes_sizes.append(stats['reduced_length'] / 1e6)
+                    minimised_genomes_sizes.append(reduced_length / 1e6)
                     
                 except Exception as e:
-                    logging.error(f"\n✗ Error processing genome {idx+1}: {e}")
+                    logging.error(f"\n✗ Error processing sample {idx+1}: {e}")
                     continue
         
         print(f"\n✓ All genomes saved to: {output_file}")
@@ -373,6 +530,11 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
         print("Analyzing sequence duplicates...")
         duplicate_stats = check_sequence_duplicates(sequences_dict)
         print_duplicate_statistics(duplicate_stats)
+        
+        # Generate summary file
+        original_length = len(SeqIO.read(genome_path, "genbank").seq)
+        generate_summary_file(output_file, model_name, genome_path, genes_path, 
+                            original_length, sequences_dict, minimised_genomes_sizes, duplicate_stats)
         
         # Generate size distribution plot
         if minimised_genomes_sizes and len(minimised_genomes_sizes) >= 10:
@@ -390,6 +552,7 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
             'minimised_genomes_sizes': minimised_genomes_sizes,
             'duplicate_stats': duplicate_stats,
             'output_file': output_file,
+            'summary_file': output_file.replace('.fasta', '_summary.txt'),
             'total_processed': len(minimised_genomes_sizes),
             'statistics': {
                 'mean_size_mbp': np.mean(minimised_genomes_sizes),
@@ -403,7 +566,7 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
         return results
         
     except Exception as e:
-        logging.error(f"\n✗ rror in process_multiple_genomes_single_file: {e}")
+        logging.error(f"\n✗ Error in process_multiple_genomes_single_file: {e}")
         raise
 
 
@@ -476,97 +639,6 @@ def combine_existing_fasta_files(input_dir: str, output_file: str, check_duplica
         logging.error(f"\n✗ Error combining FASTA files: {e}")
         raise
 
-
-def reduce_genome_interactive():
-    """
-    Interactive function to reduce genomes with user input prompts.
-    This recreates the original commented-out functionality.
-    """
-    print("\n" + "="*80)
-    print("INTERACTIVE GENOME MINIMIZATION")
-    print("="*80)
-    
-    try:
-        # Get user inputs
-        genome_path = input("Please enter path for the GenBank sequence file: ").strip()
-        genes_path = input("Please enter path to the list of lists of sample genes (.npy): ").strip()
-        weight_str = input("Please enter the weight of the model: ").strip()
-        
-        # Ask for output preference
-        output_choice = input("Generate single FASTA file? (y/n, default=y): ").strip().lower()
-        single_file = output_choice != 'n'
-        
-        # Validate inputs
-        if not genome_path or not genes_path or not weight_str:
-            print("\n✗ All inputs are required")
-            return None
-        
-        try:
-            weight = float(weight_str)
-        except ValueError:
-            print("\n✗ Weight must be a valid number")
-            return None
-        
-        if not os.path.exists(genome_path):
-            print(f"\n✗ Genome file not found: {genome_path}")
-            return None
-            
-        if not os.path.exists(genes_path):
-            print(f"\n✗ Genes file not found: {genes_path}")
-            return None
-        
-        # Set up output
-        base_output_dir = PROJECT_ROOT + "/src/genome_minimizer_2/data/generated_genomes/"
-        os.makedirs(base_output_dir, exist_ok=True)
-        
-        if single_file:
-            output_file = os.path.join(base_output_dir, f"minimized_genomes_weight_{weight}.fasta")
-            print(f"Will generate single file: {output_file}")
-        else:
-            output_dir = os.path.join(base_output_dir, f"weight_{weight}/")
-            os.makedirs(output_dir, exist_ok=True)
-            print(f"Will generate multiple files in: {output_dir}")
-        
-        # Load basic info for display
-        try:
-            from Bio import SeqIO
-            wildtype_sequence = SeqIO.read(genome_path, "genbank")
-            original_genome_length = len(wildtype_sequence.seq)
-            present_genes_list = np.load(genes_path, allow_pickle=True).tolist()
-        except Exception as e:
-            print(f"\n✗ Error loading data: {e}")
-            return None
-        
-        print(f"✓ Loaded genome with {original_genome_length:,} base pairs")
-        print(f"✓ Loaded {len(present_genes_list)} gene sets")
-        
-        # Process genomes
-        if single_file:
-            results = process_multiple_genomes_single_file(
-                genome_path, genes_path, f"weight_{weight}", output_file
-            )
-            
-            print(f"\nFinal Results:")
-            stats = results['statistics']
-            print(f"- Processed genomes: {results['total_processed']}")
-            print(f"- Average size: {stats['mean_size_mbp']:.2f} Mbp")
-            print(f"- Size range: {stats['min_size_mbp']:.2f} - {stats['max_size_mbp']:.2f} Mbp")
-            print(f"- Compression ratio: {results['duplicate_stats']['compression_ratio']:.1%}")
-            
-            return results
-        else:
-            # Use the original multi-file approach
-            sizes = reduce_genome_batch(genome_path, genes_path, weight, output_dir)
-            return sizes
-        
-    except KeyboardInterrupt:
-        print("\n\n✗ Process interrupted by user")
-        return None
-    except Exception as e:
-        print(f"\n✗ Error in interactive genome reduction: {e}")
-        return None
-
-
 def reduce_genome_batch(genome_path: str, genes_path: str, weight: float, output_dir: str = None):
     """
     Batch process genome reduction without user interaction.
@@ -580,9 +652,7 @@ def reduce_genome_batch(genome_path: str, genes_path: str, weight: float, output
     Returns:
     list: List of minimized genome sizes in Mbp
     """
-    if output_dir is None:
-        output_dir = PROJECT_ROOT + "data/generated_genomes/"
-    
+    output_dir = os.path.join(PROJECT_ROOT, "minimized_genomes")
     os.makedirs(output_dir, exist_ok=True)
     
     try:
