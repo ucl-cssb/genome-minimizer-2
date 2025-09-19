@@ -337,7 +337,7 @@ class IntegratedExperimentRunner:
         self.logger.info("Generating comparison graphs...")
         try:
             epochs = np.linspace(1, self.results['epochs_trained'], num=self.results['epochs_trained'])
-            name = os.path.join(self.figure_dir, "train_val_loss.pdf")
+            name = os.path.join(self.figure_dir, f"{self.config.trainer_version}_train_val_loss.pdf")
             plot_loss_vs_epochs_graph(
                 epochs=epochs, 
                 train_loss_vals=self.results['train_loss_vals'], 
@@ -371,10 +371,10 @@ class IntegratedExperimentRunner:
             self.logger.info(f"F1 Score range: {np.min(f1_scores):.4f} - {np.max(f1_scores):.4f}")
             self.logger.info(f"Accuracy range: {np.min(accuracy_scores):.4f} - {np.max(accuracy_scores):.4f}")
             
-            print_metric_summary(overall_f1, overall_accuracy, f1_scores, accuracy_scores, self.figure_dir)
+            print_metric_summary(self.config, overall_f1, overall_accuracy, f1_scores, accuracy_scores, self.figure_dir)
             
             if self.config.generate_plots:
-                generate_metric_histograms(f1_scores, accuracy_scores, self.figure_dir)
+                generate_metric_histograms(f1_scores, accuracy_scores, self.config, self.figure_dir)
                 self.logger.info("Metric histograms generated")
                 
         except Exception as e:
@@ -391,7 +391,7 @@ class IntegratedExperimentRunner:
         try:
             # PCA visualization
             df_pca = plot_latent_space_pca(
-                self.model, self.test_loader, self.test_phylogroups, 
+                self.model, self.test_loader, self.config, self.test_phylogroups, 
                 self.figure_dir, show_plot=self.config.generate_plots
             )
             

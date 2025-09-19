@@ -22,8 +22,8 @@ def plot_essential_vs_total(essential_counts, total_counts, output_path):
     plt.figure(figsize=(4,4))
     plt.scatter(total_counts, essential_counts, color='violet')
     sns.regplot(x=total_counts, y=essential_counts, scatter=False, color='black')
-    plt.xlabel("Total Genes")
-    plt.ylabel("Essential Genes")
+    plt.xlabel("Genome size")
+    plt.ylabel("Essential genes")
     plt.savefig(output_path, format="pdf", bbox_inches="tight")
     plt.close()
 
@@ -108,10 +108,10 @@ def plot_essential_genes_distribution(essential_genes_count_per_sample, figure_n
     min_value = np.min(essential_genes_count_per_sample)
     max_value = np.max(essential_genes_count_per_sample)
 
-    plt.figure(figsize=(4,4), dpi=300)
-    plt.hist(essential_genes_count_per_sample, bins=10, color=plot_color)
+    plt.figure(figsize=(5,5))
+    plt.hist(essential_genes_count_per_sample, color=plot_color)
     plt.xlim(x_min, x_max)
-    plt.xlabel('Essential genes number')
+    plt.xlabel('Essential genes')
     plt.ylabel('Frequency')
 
     plt.axvline(median, color='b', linestyle='dashed', linewidth=2, label=f'Median: {median:.2f}')
@@ -120,7 +120,7 @@ def plot_essential_genes_distribution(essential_genes_count_per_sample, figure_n
 
     handles = [plt.Line2D([], [], color='b', linestyle='dashed', linewidth=2, label=f'Median: {median:.2f}'), dummy_min, dummy_max]
 
-    plt.legend(handles=handles, fontsize=8)
+    plt.legend(handles=handles, fontsize=6)
     plt.savefig(figure_name, format="pdf", bbox_inches="tight")
 
 
@@ -147,7 +147,7 @@ def plot_samples_distribution(binary_generated_samples, figure_name, plot_color,
     min_value = np.min(samples_size_sum)
     max_value = np.max(samples_size_sum)
 
-    plt.figure(figsize=(4,4), dpi=300)
+    plt.figure(figsize=(5,5))
     plt.hist(samples_size_sum, color=plot_color)
     plt.xlim(x_min, x_max)
     plt.xlabel('Genome size')
@@ -159,7 +159,7 @@ def plot_samples_distribution(binary_generated_samples, figure_name, plot_color,
 
     handles = [plt.Line2D([], [], color='b', linestyle='dashed', linewidth=2, label=f'Median: {median:.2f}'), dummy_min, dummy_max]
 
-    plt.legend(handles=handles, fontsize=8)
+    plt.legend(handles=handles, fontsize=6, loc='upper left')
     plt.savefig(figure_name, format="pdf", bbox_inches="tight")
 
 

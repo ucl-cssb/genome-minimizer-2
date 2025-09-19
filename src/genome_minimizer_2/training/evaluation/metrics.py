@@ -64,8 +64,8 @@ def calculate_reconstruction_metrics(model, test_loader, threshold: float = 0.5)
     return overall_f1, overall_accuracy, f1_scores, accuracy_scores
 
 
-def generate_metric_histograms(f1_scores: List[float], accuracy_scores: List[float], 
-                              output_dir: str) -> None:
+def generate_metric_histograms(f1_scores: List[float], accuracy_scores: List[float], config,
+                               output_dir: str) -> None:
     """
     Generate and save histograms of F1 and accuracy scores.
     
@@ -79,19 +79,26 @@ def generate_metric_histograms(f1_scores: List[float], accuracy_scores: List[flo
     
     # F1 score histogram
     plt.figure(figsize=(4, 4), dpi=300)
-    plt.hist(f1_scores, color='dodgerblue', bins=30)
-    plt.xlabel("F1 Score")
+    #plt.hist(f1_scores, color='dodgerblue', bins=30)
+    plt.hist(f1_scores, color='dodgerblue')
+    plt.xlabel("F1 score")
     plt.ylabel("Frequency")
-    plt.title("Distribution of F1 Scores")
+    #plt.title("Distribution of F1 Scores")
     plt.grid(True, alpha=0.3)
-    
+    plt.xlim(0.9, 1)
+    # make square
+    plt.tight_layout()
+
     # Add statistics text
-    mean_f1 = np.mean(f1_scores)
+    #mean_f1 = np.mean(f1_scores)
+    mean_f1 = np.median(f1_scores)
     # std_f1 = np.std(f1_scores)
-    plt.axvline(mean_f1, color='red', linestyle='--', alpha=0.8, label=f'Mean: {mean_f1:.3f}')
+    plt.axvline(mean_f1, color='red', linestyle='--', alpha=0.8, label=f'Median: {mean_f1:.3f}')
     plt.legend()
     
-    plt.savefig(os.path.join(output_dir, "f1_score_frequency_test_set.pdf"), 
+    print("################### Here:", config.trainer_version)
+
+    plt.savefig(os.path.join(output_dir, f"{config.trainer_version}_f1_score_frequency_test_set.pdf"), 
                format="pdf", bbox_inches="tight")
     plt.close()
     
@@ -100,7 +107,7 @@ def generate_metric_histograms(f1_scores: List[float], accuracy_scores: List[flo
     plt.hist(accuracy_scores, color='dodgerblue')
     plt.xlabel("Accuracy Score")
     plt.ylabel("Frequency")
-    plt.title("Distribution of Accuracy Scores")
+    #plt.title("Distribution of Accuracy Scores")
     plt.grid(True, alpha=0.3)
     
     # Add statistics text
@@ -109,12 +116,12 @@ def generate_metric_histograms(f1_scores: List[float], accuracy_scores: List[flo
     plt.axvline(mean_acc, color='darkred', linestyle='--', alpha=0.8, label=f'Mean: {mean_acc:.3f}')
     plt.legend()
     
-    plt.savefig(os.path.join(output_dir, "accuracy_score_frequency_test_set.pdf"), 
+    plt.savefig(os.path.join(output_dir, f"{config.trainer_version}_accuracy_score_frequency_test_set.pdf"), 
                format="pdf", bbox_inches="tight")
     plt.close()
 
 
-def print_metric_summary(overall_f1: float, overall_accuracy: float, 
+def print_metric_summary(config, overall_f1: float, overall_accuracy: float, 
                         f1_scores: List[float], accuracy_scores: List[float],
                         output_dir: str = None) -> None:
     """
@@ -178,8 +185,8 @@ def print_metric_summary(overall_f1: float, overall_accuracy: float,
     if output_dir:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        
-        report_file = output_path / "metrics_summary.txt"
+
+        report_file = output_path / f"{config.trainer_version}_metrics_summary.txt"
         with open(report_file, 'w') as f:
             f.write(report)
         

@@ -17,7 +17,7 @@ from src.genome_minimizer_2.utils.extras import get_latent_variables
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def plot_latent_space_pca(model, test_loader, test_phylogroups: np.ndarray, 
+def plot_latent_space_pca(model, test_loader, config, test_phylogroups: np.ndarray, 
                          output_dir: str, n_components: int = 3,
                          show_plot: bool = True) -> pd.DataFrame:
     """
@@ -49,13 +49,29 @@ def plot_latent_space_pca(model, test_loader, test_phylogroups: np.ndarray,
     df_pca['phylogroup'] = test_phylogroups
     
     if show_plot:
-        fig, axes = plt.subplots(1, 2, figsize=(8,4), dpi=300)
-        sns.scatterplot(x='PC1', y='PC2', hue=df_pca['phylogroup'], data=df_pca, ax=axes[0])
-        sns.scatterplot(x='PC2', y='PC3', hue=df_pca['phylogroup'], data=df_pca, ax=axes[1])
-        for ax in axes:
-            handles, labels = ax.get_legend_handles_labels()
-            ax.legend(handles, labels, fontsize=8)
-        plt.savefig(os.path.join(output_dir, "pca_latent_space_test_set.pdf"), 
+        #fig, axes = plt.subplots(1, 2, figsize=(8,4), dpi=300)
+        #sns.scatterplot(x='PC1', y='PC2', hue=df_pca['phylogroup'], data=df_pca, ax=axes[0])
+        #sns.scatterplot(x='PC2', y='PC3', hue=df_pca['phylogroup'], data=df_pca, ax=axes[1])
+        # for ax in axes:
+        #     handles, labels = ax.get_legend_handles_labels()
+        #     ax.legend(handles, labels, fontsize=8)
+        #     ax.set_aspect('equal', adjustable='box')
+        
+        fig, ax = plt.subplots(figsize=(5,5))
+        sns.scatterplot(x='PC1', y='PC2', hue=df_pca['phylogroup'], data=df_pca, ax=ax)
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles, labels, fontsize=6)
+        
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        lims = [min(xlim[0], ylim[0]), max(xlim[1], ylim[1])]
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        
+        ax.set_aspect('equal', adjustable='box')
+        
+        #plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f"{config.trainer_version}_pca_latent_space_test_set.pdf"), 
                    format="pdf", bbox_inches="tight")
         plt.close()
         
