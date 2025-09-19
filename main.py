@@ -384,16 +384,18 @@ def run_sampling(args):
         # Genome size distribution
         plot_samples_distribution(
             binary_samples,
-            str(output_dir / f"genome_size_distribution_{args.sampling_mode}.pdf"),
+            str(output_dir / f"{config.trainer_version}_genome_size_distribution_{args.sampling_mode}.pdf"),
             "dodgerblue",
-            int(np.min(genome_sizes) * 0.9),
-            int(np.max(genome_sizes) * 1.1)
+            #int(np.min(genome_sizes) * 0.9),
+            #int(np.max(genome_sizes) * 1.1),
+            3000,
+            5000
         )
         
         # Essential genes distribution
         plot_essential_genes_distribution(
             essential_counts,
-            str(output_dir / f"essential_genes_distribution_{args.sampling_mode}.pdf"),
+            str(output_dir / f"{config.trainer_version}_essential_genes_distribution_{args.sampling_mode}.pdf"),
             "violet",
             int(np.min(essential_counts) * 0.9),
             int(np.max(essential_counts) * 1.1)
@@ -403,7 +405,7 @@ def run_sampling(args):
         plot_essential_vs_total(
             essential_counts,
             genome_sizes,
-            str(output_dir / f"essential_vs_total_{args.sampling_mode}.pdf")
+            str(output_dir / f"{config.trainer_version}_essential_vs_total_{args.sampling_mode}.pdf")
         )
         
         # Latent space analysis
@@ -416,19 +418,19 @@ def run_sampling(args):
         import matplotlib.pyplot as plt
         import seaborn as sns
         
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(5, 5))
         sns.scatterplot(x='PC1', y='PC2', hue='phylogroup', data=df_pca)
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=6)
         plt.title('Latent Space PCA by Phylogroup')
         plt.tight_layout()
-        plt.savefig(output_dir / f"latent_space_pca_{args.sampling_mode}.pdf", 
+        plt.savefig(output_dir / f"{config.trainer_version}_latent_space_pca_{args.sampling_mode}.pdf", 
                    format="pdf", bbox_inches="tight")
         plt.close()
         
         # Save data
         print("Saving results...")
-        np.save(output_dir / f"binary_samples_{args.sampling_mode}.npy", binary_samples)
-        write_samples_to_dataframe(binary_samples, all_genes, f"{output_dir}/data_full_samples_df.csv")
+        np.save(output_dir / f"{config.trainer_version}_binary_samples_{args.sampling_mode}.npy", binary_samples)
+        write_samples_to_dataframe(binary_samples, all_genes, f"{output_dir}/{config.trainer_version}_data_full_samples_df.csv")
         
         print(f"\n✓ SAMPLING COMPLETE!")
         print(f"- Results saved to: {output_dir}")
