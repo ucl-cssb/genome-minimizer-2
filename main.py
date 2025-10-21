@@ -548,7 +548,8 @@ def run_genome_minimizer(args):
     
     try:
         from src.genome_minimizer_2.minimizer.minimizer_2 import (
-            process_multiple_genomes_single_file, 
+            process_multiple_genomes_single_file,
+            process_multiple_genomes_multiple_files
         )
         
         # Create unified output directory first
@@ -574,40 +575,34 @@ def run_genome_minimizer(args):
             output_file = output_dir / output_filename
             print(f"Generating single FASTA file: {output_file}")
             
-            results = process_multiple_genomes_single_file(
+            result = process_multiple_genomes_single_file(
                 genome_path=args.genome_path,
                 genes_path=args.genes_path,
                 model_name=args.model_name,
-                output_file=str(output_file)  # Convert Path to string
+                output_file=str(output_file)
             )
             
             print("\n✓ GENOME MINIMIZATION COMPLETED!")
             print(f"- Single file generated: {output_file}")
-            print(f"- Processed: {results['total_processed']} genomes")
-            print(f"- Unique sequences: {results['duplicate_stats']['unique_sequences']}")
-            print(f"- Compression ratio: {results['duplicate_stats']['compression_ratio']:.1%}")
+            print(f"- Processed: {result['genome_count']} genomes")
+            print(f"- Average percentage reduction: {result['average_reduction_pct']:.1f}%")
+            print(f"- Average genome length: {result['average_length_bp']:,.1f} bp")
             
-            return results
             
         else:
             print(f"Generating multiple files in: {output_dir}")
             
-            minimised_sizes = process_multiple_genomes_single_file(
+            result = process_multiple_genomes_multiple_files(
                 genome_path=args.genome_path,
                 genes_path=args.genes_path,
                 model_name=args.model_name,
-                output_dir=str(output_dir)  # Pass the directory
+                output_dir=output_dir
             )
             
             print("\n✓ GENOME MINIMIZATION COMPLETED!")
-            print(f"- Files saved to: {output_dir}")
-            print(f"- Processed {len(minimised_sizes)} genome variants")
-            if minimised_sizes:
-                avg_size = sum(minimised_sizes) / len(minimised_sizes)
-                print(f"- Average size: {avg_size:.2f} Mbp")
-                print(f"- Size range: {min(minimised_sizes):.2f} - {max(minimised_sizes):.2f} Mbp")
-            
-            return minimised_sizes
+            print(f"- Processed: {result['genome_count']} genomes")
+            print(f"- Average percentage reduction: {result['average_reduction_pct']:.1f}%")
+            print(f"- Average genome length: {result['average_length_bp']:,.1f} bp")
 
     except Exception as e:
         print(f"✗ Error during genome minimization: {e}")
