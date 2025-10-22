@@ -8,6 +8,7 @@ import os
 import sys
 import torch
 import argparse
+import pandas as pd
 from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
@@ -24,12 +25,15 @@ from src.genome_minimizer_2.utils.directories import (
     TEN_K_DATASET_PHYLOGROUPS_FULL,
     PAPER_ESSENTIAL_GENES_FULL,
     ESSENTIAL_GENES_POSITIONS,
-    WILD_TYPE_SEQUENCE_FULL
+    WILD_TYPE_SEQUENCE_FULL,
+    SEQUENCES_FULL,
+    SEQUENCE_OUT
 )
 import src.genome_minimizer_2.explore_data.data_exploration
 import src.genome_minimizer_2.explore_data.extract_essential_genes
 from src.genome_minimizer_2.utils.extras import write_samples_to_dataframe
 from src.genome_minimizer_2.explore_data.data_exploration import load_and_validate_data
+from src.genome_minimizer_2.explore_data.binary_converter import masks_to_gene_lists
 
 # Set run device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,7 +67,7 @@ def parse_arguments():
     
     # Base argiments
     parser.add_argument('--mode', 
-                        choices=['training', 'experiment', 'minimizer', 'explore', 'preprocess', 'sample'],
+                        choices=['training', 'experiment', 'minimizer', 'explore', 'preprocess', 'sample', 'convert-samples'],
                         default='training', 
                         help='Run mode: training experiment, custom experiment, evaluate existing model, genome minimizer, data exploration, preprocessing, or sampling')
     
@@ -651,6 +655,23 @@ def main():
             
         elif args.mode == 'minimizer':
             results = run_genome_minimizer(args)
+
+        elif args.mode == 'convert-samples':
+            dataset_csv = TEN_K_DATASET_FULL
+            masks_npy = SEQUENCES_FULL
+            out_ids_npy = SEQUENCE_OUT
+
+            large_data = pd.read_csv(dataset_csv, index_col=0)
+            data_without_lineage = large_data.drop(index=["Lineage"], errors="ignore")
+            print(f"Dataset shape (samples x genes): {data_without_lineage.shape}")
+            data_transpose = data_without_lineage.transpose()
+            cols = data_transpose.columns
+
+            masks_to_gene_lists(
+                masks_npy_path=masks_npy,
+                cols=cols,
+                out_ids_npy=out_ids_npy,
+            )
     
     except KeyboardInterrupt:
         print("\n\n✗ Process interrupted by user")
@@ -678,6 +699,8 @@ def main():
         print("- Check the data_exploration/figures/ directory for analysis plots\n")
     elif args.mode == 'preprocess':
         print("- Essential gene positions saved to data/ directory\n")
+    elif args.mode == 'convert-samples':
+        print("- Binary sample data converted to gene names\n")
     
     
     return 0 if results is not None else 1
