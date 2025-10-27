@@ -33,7 +33,7 @@ import src.genome_minimizer_2.explore_data.data_exploration
 import src.genome_minimizer_2.explore_data.extract_essential_genes
 from src.genome_minimizer_2.utils.extras import write_samples_to_dataframe
 from src.genome_minimizer_2.explore_data.data_exploration import load_and_validate_data
-from src.genome_minimizer_2.explore_data.binary_converter import masks_to_gene_lists
+from src.genome_minimizer_2.explore_data.binary_converter import masks_to_gene_lists, check_essential_genes, load_files
 
 # Set run device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -623,7 +623,6 @@ def run_genome_minimizer(args):
 def main():
     """Main function"""
     args = parse_arguments()
-    
     print_banner()
     print(f"\nRunning in {args.mode} mode on {device}")
     
@@ -661,6 +660,7 @@ def main():
             masks_npy = SEQUENCES_FULL
             out_ids_npy = SEQUENCE_OUT
 
+
             large_data = pd.read_csv(dataset_csv, index_col=0)
             data_without_lineage = large_data.drop(index=["Lineage"], errors="ignore")
             print(f"Dataset shape (samples x genes): {data_without_lineage.shape}")
@@ -672,6 +672,8 @@ def main():
                 cols=cols,
                 out_ids_npy=out_ids_npy,
             )
+            essential_set, id_lists = load_files()
+            check_essential_genes(essential_set, id_lists)
     
     except KeyboardInterrupt:
         print("\n\n✗ Process interrupted by user")
