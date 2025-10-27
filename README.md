@@ -109,14 +109,43 @@ python main.py --mode sample --model-path PATH --genes-path PATH [OPTIONS]
 python main.py --mode minimizer --genes-path PATH [OPTIONS]
 ```
 **Required:**
-- `--genes-path`: Binary samples (.npy file)
+- `--genes-path`: Path to a .npy file containing lists of gene names (one list per sample); Note: this is not a binary mask! pass actual gene IDs/names like the ones in the original presence absence matrix referred to in the paper.
+- `--genome-path`: Reference genome (.gb, .gbff, .genbank files allowed)
 
 **Optional:**
-- `--genome-path`: Reference genome (.gb file)
-- `--single-file`: Output single FASTA vs multiple files
-- `--output-file`: Specific output filename
+- `--single-file`: Output single FASTA file with all sequences (if not specified one FASTA file per sequence is generated)
+- `--output-file`: Specific output filename (default for one file minimized_genomes_default.fasta, for multiple minimized_default_XXXX.fasta)
 - `--output-dir`: Directory for outputs (default: ./minimized_genomes)
 - `--model-name`: Label for file naming (default: "default")
+
+**Examples:**
+
+Single combined FASTA (generated output file - minimized_default.fasta):
+```python 
+python main.py --mode minimizer \
+  --genes-path data/data_full_validated_IDS.npy \
+  --genome-path data/GCF_000005845.2.gbff \
+  --single-file \
+  --output-file minimized_genomes/minimized_default.fasta \
+```
+
+Single combined FASTA (generated output file - minimized_genomes_67.fasta):
+```python 
+python main.py --mode minimizer \
+  --genes-path data/data_full_validated_IDS.npy \
+  --genome-path data/GCF_000005845.2.gbff \
+  --single-file \
+  --model-name 67
+```
+
+Multiple FASTAs (one per sample) into a directory (generated output files - minimized_default_XXXX.fasta):
+```python 
+python main.py --mode minimizer \
+  --genes-path data/data_full_validated_IDS.npy \
+  --genome-path data/GCF_000005845.2.gbff \
+  --output-dir minimized_genomes/ \
+  --model-name default
+```
 
 ## Model Architectures
 
