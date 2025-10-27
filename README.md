@@ -109,8 +109,8 @@ python main.py --mode sample --model-path PATH --genes-path PATH [OPTIONS]
 python main.py --mode minimizer --genes-path PATH [OPTIONS]
 ```
 **Required:**
-- `--genes-path`: Path to a .npy file containing lists of gene names (one list per sample); Note: this is not a binary mask! pass actual gene IDs/names like the ones in the original presence absence matrix refered to in the paper.
-- `--genome-path`: Reference genome (.gb, .gbff, .genbanl files allowed)
+- `--genes-path`: Path to a .npy file containing lists of gene names (one list per sample); Note: this is not a binary mask! pass actual gene IDs/names like the ones in the original presence absence matrix referred to in the paper.
+- `--genome-path`: Reference genome (.gb, .gbff, .genbank files allowed)
 
 **Optional:**
 - `--single-file`: Output single FASTA file with all sequences (if not specified one FASTA file per sequence is generated)

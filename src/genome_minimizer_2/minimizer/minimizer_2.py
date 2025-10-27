@@ -29,10 +29,7 @@ class GenomeMinimiser:
         self.model_name = model_name
 
         # genome
-        if record is not None:
-            self.record = record
-        else:
-            self.record = self.load_genome(record_path)
+        self.record = record if record is not None else self.load_genome(record_path)
 
         self.wildtype_sequence = self.record
         self.original_genome_length = len(self.record.seq)
@@ -194,7 +191,7 @@ class GenomeMinimiser:
             logging.info(f"Converting {total_samples} samples to list format...")
             present_genes = genes_array.tolist()
             
-            sample_genes_count = sum(present_genes[self.idx])
+            sample_genes_count = len(present_genes[self.idx])
             logging.info(f"✓ Successfully loaded {self.idx+1}th sample ({sample_genes_count} genes per sample)")
             
             return present_genes
@@ -482,8 +479,8 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
             genome_length = len(gm.reduced_genome_str)
             sizes_mbp.append(genome_length / 1e6)
 
-            red_pct = (original_length - genome_length) / original_length * 100.0
-            if (idx + 1) <= 10 or (idx + 1) % 100 == 0:
+            if idx <= 9 or (idx + 1) % 100 == 0:
+                red_pct = (original_length - genome_length) / original_length * 100.0
                 print(f"  → {genome_length:,} bp ({red_pct:.1f}% reduction)")
                 tot_red_pct += red_pct
                 total_length_bp += genome_length
@@ -550,7 +547,7 @@ def process_multiple_genomes_multiple_files(
         tot_red_pct += red_pct
         total_length += genome_length
 
-        if (idx + 1) <= 10 or (idx + 1) % 100 == 0:
+        if idx <= 9 or (idx + 1) % 100 == 0:
             print(f"  → saved {os.path.basename(out_path)} | {genome_length:,} bp ({red_pct:.1f}% reduction)")
 
     average_reduction_pct = tot_red_pct / genome_number
