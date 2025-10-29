@@ -5,22 +5,15 @@ import logging
 import numpy as np
 import pandas as pd
 
-from ..utils.directories import (
-    TEN_K_DATASET_FULL,
-    SEQUENCES_FULL,
-    SEQUENCE_OUT,
-    PAPER_ESSENTIAL_GENES
-)
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def load_files():
-    essential_genes = pd.read_csv(PAPER_ESSENTIAL_GENES)
-    essential_set = set(essential_genes["# gene"].astype(str))
+def load_files(essentials_csv_path: str, ids_npy_path: str):
+    essential_genes = pd.read_csv(essentials_csv_path)
 
-    id_lists = np.load(SEQUENCE_OUT, allow_pickle=True)
-
+    col = "# gene" if "# gene" in essential_genes.columns else "gene"
+    essential_set = set(essential_genes[col].astype(str).str.strip())
+    id_lists = np.load(ids_npy_path, allow_pickle=True)
     return essential_set, id_lists
 
 def masks_to_gene_lists(
@@ -82,7 +75,7 @@ def masks_to_gene_lists(
 
     print(f"✓ Number of samples processed = {N} | Average gene count = {sizes.mean():.1f}")
 
-def check_essential_genes(essential_set, id_lists):
+def check_essential_genes(essential_set, id_lists, out_ids_npy):
     total_essential = len(essential_set)
     n_samples = len(id_lists)
     logging.info(f"Checking & fixing essential genes (n={total_essential}) across {n_samples} samples")
@@ -119,7 +112,7 @@ def check_essential_genes(essential_set, id_lists):
         if (idx + 1) % 10 == 0:
             print(f"[progress] verified {idx+1}/{n_samples} samples")
 
-    base, ext = os.path.splitext(SEQUENCE_OUT)
+    base, ext = os.path.splitext(out_ids_npy)
     out_path = base + "_with_essentials" + ext
     np.save(out_path, np.array(updated_samples, dtype=object))
     logging.info(f"Saved updated samples with essential genes to: {out_path}")
@@ -127,21 +120,3 @@ def check_essential_genes(essential_set, id_lists):
     print(f"✓ Verified {n_samples} samples | already OK: {n_ok} | fixed: {n_fixed}")
     return out_path
 
-
-def main():
-    large_data = pd.read_csv(TEN_K_DATASET_FULL, index_col=0)
-    data_without_lineage = large_data.drop(index=["Lineage"], errors="ignore")
-    data_transpose = data_without_lineage.transpose()
-    print(f"Dataset shape (samples x genes): {data_transpose.shape}")
-    cols = data_transpose.columns
-
-    masks_to_gene_lists(
-        masks_npy_path=SEQUENCES_FULL,
-        cols=cols,  
-        out_ids_npy=SEQUENCE_OUT,
-    )
-    essential_set, id_lists = load_files()
-    check_essential_genes(essential_set, id_lists)
-
-if __name__ == "__main__":
-    main()

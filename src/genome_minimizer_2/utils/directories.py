@@ -14,8 +14,7 @@ TEN_K_DATASET = "data/F4_complete_presence_absence.csv"
 TEN_K_DATASET_PHYLOGROUPS = "data/accessionID_phylogroup_BD.csv"
 PAPER_ESSENTIAL_GENES = "data/essential_genes.csv"
 WILD_TYPE_SEQUENCE = "data/wild_type_sequence.gb"
-SEQUENCES = "data/data_full_validated.npy"
-SEQUENCE_OUT = "data/data_full_validated_IDS.npy"
+SAMPLES_BINARY = "data/data_full_validated.npy"
 
 # Generated data paths
 ESSENTIAL_GENES_POSITIONS = os.path.join(PROJECT_ROOT, "src", "genome_minimizer_2", "data", "essential_genes", "essential_gene_positions.pkl")
@@ -31,4 +30,4 @@ TEN_K_DATASET_FULL = get_full_path(TEN_K_DATASET)
 TEN_K_DATASET_PHYLOGROUPS_FULL = get_full_path(TEN_K_DATASET_PHYLOGROUPS)
 PAPER_ESSENTIAL_GENES_FULL = get_full_path(PAPER_ESSENTIAL_GENES)
 WILD_TYPE_SEQUENCE_FULL = get_full_path(WILD_TYPE_SEQUENCE)
-SEQUENCES_FULL = get_full_path(SEQUENCES)
+SAMPLES_BINARY_FULL = get_full_path(SAMPLES_BINARY)

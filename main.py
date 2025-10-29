@@ -25,15 +25,13 @@ from src.genome_minimizer_2.utils.directories import (
     TEN_K_DATASET_PHYLOGROUPS_FULL,
     PAPER_ESSENTIAL_GENES_FULL,
     ESSENTIAL_GENES_POSITIONS,
-    WILD_TYPE_SEQUENCE_FULL,
-    SEQUENCES_FULL,
-    SEQUENCE_OUT
+    WILD_TYPE_SEQUENCE_FULL
 )
 import src.genome_minimizer_2.explore_data.data_exploration
 import src.genome_minimizer_2.explore_data.extract_essential_genes
 from src.genome_minimizer_2.utils.extras import write_samples_to_dataframe
 from src.genome_minimizer_2.explore_data.data_exploration import load_and_validate_data
-from src.genome_minimizer_2.explore_data.binary_converter import masks_to_gene_lists, check_essential_genes, load_files
+from src.genome_minimizer_2.explore_data.binary_converter import masks_to_gene_lists, load_files, check_essential_genes
 
 # Set run device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -103,7 +101,7 @@ def parse_arguments():
     
     parser.add_argument('--output-file',
                         type=str,
-                        help='Output file path for single combined FASTA file')
+                        help='Output file path for single combined FASTA file / output file for the finals')
     
     parser.add_argument('--single-file',
                         action='store_true',
@@ -619,6 +617,35 @@ def run_genome_minimizer(args):
         traceback.print_exc()
         return None
 
+def run_binary_converter(args):
+    if not args.genes_path:
+        print("✗ --genes-path is required in convert-samples mode (input masks .npy)")
+        return False
+    if not os.path.exists(args.genes_path):
+        print(f"✗ Input masks file not found: {args.genes_path}")
+        return False
+
+    out_path = args.output_file or "seq_out.npy"
+
+    large_data = pd.read_csv(TEN_K_DATASET_FULL, index_col=0)
+    data_without_lineage = large_data.drop(index=["Lineage"], errors="ignore")
+    data_transpose = data_without_lineage.transpose()
+    print(f"Dataset shape (samples x genes): {data_transpose.shape}")
+    cols = data_transpose.columns
+
+    masks_to_gene_lists(
+        masks_npy_path=args.genes_path,
+        cols=cols,
+        out_ids_npy=out_path,
+    )
+
+    essential_set, id_lists = load_files(PAPER_ESSENTIAL_GENES_FULL, out_path)
+    filled_path = check_essential_genes(essential_set, id_lists, out_path)
+
+    print("✓ Binary conversion complete")
+    print(f"- Gene lists: {out_path}")
+    print(f"- Gene lists (essentials filled): {filled_path}")
+    return True
 
 def main():
     """Main function"""
@@ -656,24 +683,7 @@ def main():
             results = run_genome_minimizer(args)
 
         elif args.mode == 'convert-samples':
-            dataset_csv = TEN_K_DATASET_FULL
-            masks_npy = SEQUENCES_FULL
-            out_ids_npy = SEQUENCE_OUT
-
-
-            large_data = pd.read_csv(dataset_csv, index_col=0)
-            data_without_lineage = large_data.drop(index=["Lineage"], errors="ignore")
-            print(f"Dataset shape (samples x genes): {data_without_lineage.shape}")
-            data_transpose = data_without_lineage.transpose()
-            cols = data_transpose.columns
-
-            masks_to_gene_lists(
-                masks_npy_path=masks_npy,
-                cols=cols,
-                out_ids_npy=out_ids_npy,
-            )
-            essential_set, id_lists = load_files()
-            check_essential_genes(essential_set, id_lists)
+            results = run_binary_converter(args)
     
     except KeyboardInterrupt:
         print("\n\n✗ Process interrupted by user")
