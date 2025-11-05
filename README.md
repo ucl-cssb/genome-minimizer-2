@@ -12,7 +12,8 @@ Data Files → [Preprocess] → [Explore] → [Training] → [Sample] → [Minim
 2. **Explore**: Analyze dataset distributions and generate visualizations  
 3. **Training**: Train VAE models with different configurations
 4. **Sample**: Generate synthetic genomes from trained models
-5. **Minimize**: Create actual minimized genome sequences
+5. **Binary converter**: Converts binary synthetic genomes into lists with gene names
+6. **Minimize**: Create actual minimized genome sequences
 
 ## Setup
 
@@ -45,7 +46,8 @@ Data Files → [Preprocess] → [Explore] → [Training] → [Sample] → [Minim
 python main.py --mode preprocess
 python main.py --mode training --preset v0 --epochs 1
 python main.py --mode sample --model-path models/trained_models/v0_model/saved_VAE_v0.pt --genes-path data/essential_genes/essential_gene_positions.pkl --num-samples 100
-python main.py --mode minimizer --genes-path models/v0_model/sampling_results/binary_samples_default.npy --single-file --output-file results.fasta
+python main.py --mode convert-samples --genes-path data/binary_samples_default.npy
+python main.py --mode minimizer --genes-path data/seq_out.npy --single-file --output-file results.fasta
 ```
 
 ## Data Setup
@@ -67,6 +69,7 @@ data/
 | `explore` | Generate data analysis plots | `python main.py --mode explore` |
 | `training` | Train VAE models | `python main.py --mode training --preset v0` |
 | `sample` | Generate synthetic genomes | `python main.py --mode sample --model-path MODEL.pt --genes-path GENES.pkl` |
+| `convert-samples` | Converts binary synthetic genomes to a list of gene names | `python main.py --mode convert-samples --genes-path BINARY_SAMPLES.npy` |
 | `minimizer` | Create FASTA sequences | `python main.py --mode minimizer --genes-path SAMPLES.npy --single-file` |
 
 ## Parameters by Mode
@@ -103,6 +106,17 @@ python main.py --mode sample --model-path PATH --genes-path PATH [OPTIONS]
 - `--sampling-mode default/focused`: Strategy (default: default)
 - `--noise-level N`: Noise for focused sampling (default: 0.1)
 - `--genome-path`: Reference genome (.gb file)
+
+### Binary converter
+```bash
+python main.py --mode convert-samples --genes-path PATH    
+```
+
+**Required:**
+- `--genes-path`: Binary samples (.npy file)
+
+**Optional:**
+- `--output_file`: Output file name (default: seq_out.npy and seq_out_with_essentials.npy)
 
 ### Minimizer
 ```bash
