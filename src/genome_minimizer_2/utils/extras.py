@@ -109,7 +109,7 @@ def plot_essential_genes_distribution(essential_genes_count_per_sample, figure_n
     max_value = np.max(essential_genes_count_per_sample)
 
     plt.figure(figsize=(5,5))
-    plt.hist(essential_genes_count_per_sample, color=plot_color)
+    plt.hist(essential_genes_count_per_sample, color=plot_color, range=(x_min, x_max), bins=30)
     plt.xlim(x_min, x_max)
     plt.xlabel('Essential genes')
     plt.ylabel('Frequency')

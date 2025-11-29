@@ -121,9 +121,9 @@ def create_genome_size_distribution_plot(data_without_lineage: pd.DataFrame) -> 
     
     plt.figure(figsize=FIGURE_SIZE, dpi=PLOT_DPI)
     plt.hist(gene_frequencies, color=PLOT_COLOR, bins=20)
-    plt.xlabel('Number of Genomes')
-    plt.ylabel('Number of Genes')
-    plt.title('Distribution of Gene Frequencies Across Genomes')
+    plt.xlabel('Genome size')
+    plt.ylabel('Frequency')
+    #plt.title('Distribution of Gene Frequencies Across Genomes')
 
     stats = {
         'median': np.median(gene_frequencies),
@@ -132,15 +132,15 @@ def create_genome_size_distribution_plot(data_without_lineage: pd.DataFrame) -> 
         'max': np.max(gene_frequencies),
     }
 
-    plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}")
+    plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {int(stats['median'])}")
 
     # FIX: Use dictionary keys consistently
-    dummy_min = plt.Line2D([], [], color='black', linewidth=2, label=f"Min: {stats['min']:.2f}")
-    dummy_max = plt.Line2D([], [], color='black', linewidth=2, label=f"Max: {stats['max']:.2f}")
+    dummy_min = plt.Line2D([], [], color='black', linewidth=2, label=f"Min: {int(stats['min'])}")
+    dummy_max = plt.Line2D([], [], color='black', linewidth=2, label=f"Max: {int(stats['max'])}")
 
     # FIX: Use dictionary keys in the handles list too
     handles = [
-        plt.Line2D([], [], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}"), 
+        plt.Line2D([], [], color='b', linestyle='dashed', linewidth=2, label=f"Median: {int(stats['median'])}"), 
         dummy_min, 
         dummy_max
     ]
@@ -176,11 +176,11 @@ def create_gene_count_distribution_plot(data_without_lineage: pd.DataFrame) -> N
     
     plt.figure(figsize=FIGURE_SIZE, dpi=PLOT_DPI)
     plt.hist(genome_sizes, color=PLOT_COLOR, bins=20)
-    plt.xlabel('Number of Genes')
-    plt.ylabel('Number of Genomes')
-    plt.title('Distribution of Genome Sizes')
+    plt.xlabel('Number of genomes')
+    plt.ylabel('Number of genes')
+    #plt.title('Distribution of Genome Sizes')
     
-    plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}")
+    #plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}")
 
     # FIX: Use dictionary keys consistently
     dummy_min = plt.Line2D([], [], color='black', linewidth=2, label=f"Min: {stats['min']:.2f}")
@@ -193,7 +193,7 @@ def create_gene_count_distribution_plot(data_without_lineage: pd.DataFrame) -> N
         dummy_max
     ]
 
-    plt.legend(handles=handles, fontsize=8)
+    #plt.legend(handles=handles, fontsize=8)
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / "plot_gene_count_final.pdf", format="pdf", bbox_inches="tight")
     plt.close()
@@ -224,7 +224,7 @@ def create_gene_frequency_threshold_plot(data_without_lineage: pd.DataFrame) -> 
     plt.plot(thresholds, threshold_data, color=PLOT_COLOR, linewidth=2)
     plt.xlabel("Minimum Number of Genomes")
     plt.ylabel("Number of Genes")
-    plt.title("Gene Frequency Threshold Analysis")
+    #plt.title("Gene Frequency Threshold Analysis")
     
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / "plot_gene_frequency_final.pdf", format="pdf", bbox_inches="tight")
@@ -369,11 +369,11 @@ def create_essential_genes_distribution_plot(essential_genes_df: pd.DataFrame) -
     plt.figure(figsize=FIGURE_SIZE, dpi=PLOT_DPI)
     plt.hist(essential_gene_counts, color=PLOT_COLOR, bins=50)
     
-    plt.xlabel('Essential Gene Number')
+    plt.xlabel('Essential genes')
     plt.ylabel('Frequency')
-    plt.title('Distribution of Essential Genes per Genome')
+    #plt.title('Distribution of Essential Genes per Genome')
     
-    plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}")
+    #plt.axvline(stats['median'], color='b', linestyle='dashed', linewidth=2, label=f"Median: {stats['median']:.2f}")
 
     dummy_min = plt.Line2D([], [], color='black', linewidth=2, label=f"Min: {stats['min']:.2f}")
     dummy_max = plt.Line2D([], [], color='black', linewidth=2, label=f"Max: {stats['max']:.2f}")
@@ -383,7 +383,7 @@ def create_essential_genes_distribution_plot(essential_genes_df: pd.DataFrame) -
         dummy_min, 
         dummy_max
     ]
-    plt.legend(handles=handles, fontsize=8)
+    #plt.legend(handles=handles, fontsize=8)
 
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / "plot_EG_number.pdf", format="pdf", bbox_inches="tight")
@@ -410,7 +410,7 @@ def create_pca_phylogroup_plot(merged_df: pd.DataFrame) -> None:
     
     plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.1%} variance)')
     plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} variance)')
-    plt.title('PCA Analysis by Phylogroup')
+    #plt.title('PCA Analysis by Phylogroup')
     
     plt.tight_layout()
     
