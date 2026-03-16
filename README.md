@@ -170,6 +170,19 @@ python main.py --mode minimizer \
 | v2 | 512→32 | + Cosine annealing |
 | v3 | 512→32 | + Weighted abundance |
 
+## Experiment Tracking & Checkpoints
+
+- **W&B**: [wandb.ai/mcclain/genome-minimizer-2](https://wandb.ai/mcclain/genome-minimizer-2) — training loss curves, per-component losses, learning rate, and test metrics (F1, accuracy)
+- **HF Hub**: [huggingface.co/McClain/genome-minimizer-2](https://huggingface.co/McClain/genome-minimizer-2) — model checkpoints, one branch per preset (`v0`, `v1`, `v2`, `v3`)
+
+Checkpoints are saved every 500 epochs (configurable via `checkpoint_every` in `ExperimentConfig`) and include full training state (model, optimizer, scheduler) for resumable training.
+
+To download a checkpoint:
+```python
+from huggingface_hub import hf_hub_download
+path = hf_hub_download("McClain/genome-minimizer-2", "final.pt", revision="v3")
+```
+
 ## Output Structure
 
 ```

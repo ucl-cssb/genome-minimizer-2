@@ -46,6 +46,10 @@ class ExperimentConfig:
     val_ratio: float = 0.3333
     random_state: int = 12345
     
+    # Checkpointing parameters
+    checkpoint_every: int = 500  # Save checkpoint every N epochs (0 to disable)
+    hf_repo_id: str = "McClain/genome-minimizer-2"
+
     # Output parameters
     experiment_name: str = "experiment"
     save_model: bool = True

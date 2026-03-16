@@ -83,7 +83,7 @@ class EarlyStopping:
 
 class VAETrainer:
     """Main training class that uses loss components"""
-    
+
     def __init__(self, model: nn.Module, optimizer, scheduler, config: TrainingConfig):
         self.model = model
         self.optimizer = optimizer
@@ -91,6 +91,7 @@ class VAETrainer:
         self.config = config
         self.loss_tracker = None
         self.early_stopping = EarlyStopping(config.patience, config.min_delta)
+        self.checkpoint_fn = None  # Optional: called with (model, optimizer, scheduler, epoch)
     
     def setup_loss_components(self, loss_components: List[LossComponent]):
         """Setup loss components for training"""
@@ -159,33 +160,47 @@ class VAETrainer:
         """Main training loop"""
         if self.loss_tracker is None:
             raise ValueError("Loss components not set up. Call setup_loss_components first.")
-        
+
+        import wandb
+
         for epoch in range(self.config.n_epochs):
             # Training
             train_losses = self.train_epoch(train_loader, epoch)
             self.loss_tracker.update_epoch_losses(train_losses, is_training=True)
-            
+
             # Validation
             val_losses = self.validate_epoch(val_loader, epoch)
             self.loss_tracker.update_epoch_losses(val_losses, is_training=False)
-            
+
             # Learning rate scheduling
             self.scheduler.step()
-            
+
+            # Log to wandb
+            log_dict = {"epoch": epoch + 1, "lr": self.scheduler.get_last_lr()[0]}
+            for name, val in train_losses.items():
+                log_dict[f"train/{name}"] = val
+            for name, val in val_losses.items():
+                log_dict[f"val/{name}"] = val
+            wandb.log(log_dict, step=epoch + 1)
+
+            # Checkpoint
+            if self.checkpoint_fn:
+                self.checkpoint_fn(self.model, self.optimizer, self.scheduler, epoch + 1)
+
             # Print progress
             if (epoch + 1) % self.config.print_every == 0:
                 print(f"Epoch {epoch + 1}:")
                 print(f"  Learning Rate: {self.scheduler.get_last_lr()[0]}")
                 print(f"  Train Loss: {train_losses['total']}")
                 print(f"  Validation Loss: {val_losses['total']}")
-            
+
             # Early stopping
             if self.early_stopping.should_stop(val_losses['total']):
                 print(f"Early stopping triggered after {epoch + 1} epochs")
                 break
-        
-        return (self.loss_tracker.train_losses['total'], 
-                self.loss_tracker.val_losses['total'], 
+
+        return (self.loss_tracker.train_losses['total'],
+                self.loss_tracker.val_losses['total'],
                 epoch + 1)
 
 

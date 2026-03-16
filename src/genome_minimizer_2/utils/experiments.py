@@ -5,15 +5,22 @@ Config for experiments
 
 # Import libraries
 import os
+import tempfile
 import torch
 import numpy as np
 import logging
+import wandb
+from dataclasses import fields
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
+from huggingface_hub import HfApi
 
 # Import modules
 from src.genome_minimizer_2.utils.custom_config import ExperimentConfig
-from src.genome_minimizer_2.training.training.trainer import v0, v1, v2, v3
+from src.genome_minimizer_2.training.training.trainer import (
+    v0, v1, v2, v3,
+    create_v0_trainer, create_v1_trainer, create_v2_trainer, create_v3_trainer,
+)
 from src.genome_minimizer_2.training.evaluation.metrics import (
     calculate_reconstruction_metrics, 
     generate_metric_histograms, 
@@ -131,6 +138,12 @@ class IntegratedExperimentRunner:
         os.makedirs(self.model_dir, exist_ok=True)
         
         self.logger.info(f"Created directories: {self.figure_dir}, {self.model_dir}")
+
+        # HF Hub — one branch per preset
+        self.hf_api = HfApi()
+        self.hf_api.create_repo(config.hf_repo_id, exist_ok=True)
+        self.hf_branch = config.trainer_version
+        self.hf_api.create_branch(config.hf_repo_id, branch=self.hf_branch, exist_ok=True)
 
         # Data storage
         self.train_loader = None
@@ -269,61 +282,103 @@ class IntegratedExperimentRunner:
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.logger.info(f"Model parameters - Total: {total_params:,}, Trainable: {trainable_params:,}")
     
+    def _save_checkpoint(self, model, optimizer, scheduler, epoch, path_in_repo):
+        """Save a checkpoint locally and upload to HF Hub on the preset branch."""
+        checkpoint = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+        }
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+            torch.save(checkpoint, f.name)
+            tmp_path = f.name
+        self.hf_api.upload_file(
+            path_or_fileobj=tmp_path,
+            path_in_repo=path_in_repo,
+            repo_id=self.config.hf_repo_id,
+            revision=self.hf_branch,
+        )
+        os.unlink(tmp_path)
+        self.logger.info(f"Checkpoint uploaded to {self.config.hf_repo_id}@{self.hf_branch}/{path_in_repo}")
+
+    def _make_checkpoint_fn(self):
+        """Create a checkpoint callback for the trainer."""
+        checkpoint_every = self.config.checkpoint_every
+        if checkpoint_every <= 0:
+            return None
+        version = self.config.trainer_version
+
+        def checkpoint_fn(model, optimizer, scheduler, epoch):
+            if epoch % checkpoint_every == 0:
+                path_in_repo = f"checkpoint-epoch-{epoch}.pt"
+                self._save_checkpoint(model, optimizer, scheduler, epoch, path_in_repo)
+
+        return checkpoint_fn
+
     def train_model(self):
-        """Train using original v0-v3 functions configs"""
+        """Train using v0-v3 trainer configs with HF Hub checkpointing."""
         self.logger.info(f"Starting training with {self.config.trainer_version} configuration...")
         self.logger.info(f"Training for {self.config.n_epochs} epochs")
-        
-        folder = self.figure_dir + "/"  # Add trailing slash for compatibility
-        
+
+        cfg = self.config
+        folder = self.figure_dir + "/"
+
         try:
-            if self.config.trainer_version == "v0":
-                train_loss_vals, val_loss_vals, epochs = v0(
-                    self.model, folder, self.optimizer, self.scheduler, 
-                    self.config.n_epochs, self.train_loader, self.val_loader,
-                    self.config.min_beta, self.config.max_beta, self.config.max_norm
+            # Create trainer
+            if cfg.trainer_version == "v0":
+                trainer = create_v0_trainer(
+                    self.model, self.optimizer, self.scheduler,
+                    cfg.n_epochs, cfg.max_norm, cfg.min_beta, cfg.max_beta,
                 )
-            elif self.config.trainer_version == "v1":
-                train_loss_vals, val_loss_vals, epochs = v1(
-                    self.model, folder, self.optimizer, self.scheduler,
-                    self.config.n_epochs, self.train_loader, self.val_loader,
-                    self.config.min_beta, self.config.max_beta,
-                    self.config.gamma_start, self.config.gamma_end,
-                    self.config.max_norm, self.config.lambda_l1
+            elif cfg.trainer_version == "v1":
+                trainer = create_v1_trainer(
+                    self.model, self.optimizer, self.scheduler,
+                    cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
+                    cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end,
                 )
-            elif self.config.trainer_version == "v2":
-                train_loss_vals, val_loss_vals, epochs = v2(
-                    self.model, folder, self.optimizer, self.scheduler,
-                    self.config.n_epochs, self.train_loader, self.val_loader,
-                    self.config.min_beta, self.config.max_beta,
-                    self.config.gamma_start, self.config.gamma_end,
-                    self.config.max_norm, self.config.lambda_l1
+            elif cfg.trainer_version == "v2":
+                trainer = create_v2_trainer(
+                    self.model, self.optimizer, self.scheduler,
+                    cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
+                    cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end,
                 )
-            elif self.config.trainer_version == "v3":
-                train_loss_vals, val_loss_vals, epochs = v3(
-                    self.model, folder, self.optimizer, self.scheduler,
-                    self.config.n_epochs, self.train_loader, self.val_loader,
-                    self.config.min_beta, self.config.max_beta,
-                    self.config.gamma_start, self.config.gamma_end,
-                    self.config.weight, self.config.max_norm, self.config.lambda_l1
+            elif cfg.trainer_version == "v3":
+                trainer = create_v3_trainer(
+                    self.model, self.optimizer, self.scheduler,
+                    cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
+                    cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end, cfg.weight,
                 )
             else:
-                raise ValueError(f"Unknown trainer version: {self.config.trainer_version}")
-            
+                raise ValueError(f"Unknown trainer version: {cfg.trainer_version}")
+
+            # Set checkpoint callback
+            trainer.checkpoint_fn = self._make_checkpoint_fn()
+
+            # Train
+            train_loss_vals, val_loss_vals, epochs = trainer.train(
+                self.train_loader, self.val_loader, folder
+            )
+
             self.results['train_loss_vals'] = train_loss_vals
             self.results['val_loss_vals'] = val_loss_vals
             self.results['epochs_trained'] = epochs
-            
+
             self.logger.info(f"Training completed after {epochs} epochs")
             self.logger.info(f"Final train loss: {train_loss_vals[-1]:.4f}")
             self.logger.info(f"Final validation loss: {val_loss_vals[-1]:.4f}")
-            
-            # Save model
-            if self.config.save_model:
-                model_path = os.path.join(self.model_dir, f"saved_VAE_{self.config.trainer_version}.pt")
+
+            # Save final model locally and to HF Hub
+            if cfg.save_model:
+                model_path = os.path.join(self.model_dir, f"saved_VAE_{cfg.trainer_version}.pt")
                 torch.save(self.model.state_dict(), model_path)
                 self.logger.info(f"Model saved to {model_path}")
-                
+
+                path_in_repo = "final.pt"
+                self._save_checkpoint(
+                    self.model, self.optimizer, self.scheduler, epochs, path_in_repo
+                )
+
         except Exception as e:
             self.logger.error(f"Error during training: {e}")
             raise
@@ -424,7 +479,15 @@ class IntegratedExperimentRunner:
     def run_complete_experiment(self):
         """Run the complete experiment pipeline"""
         self.logger.info(f"** START OF EXPERIMENT: {self.config.experiment_name} **")
-        
+
+        # Init wandb
+        config_dict = {f.name: getattr(self.config, f.name) for f in fields(self.config)}
+        wandb.init(
+            project="genome-minimizer-2",
+            name=self.config.experiment_name,
+            config=config_dict,
+        )
+
         try:
             self.prep_data()
             self.setup_model_and_training()
@@ -434,13 +497,22 @@ class IntegratedExperimentRunner:
             self.calculate_metrics()
             self.explore_latent_space()
             self.generate_summary_plot()
-            
+
+            # Log final metrics to wandb
+            if 'f1_overall' in self.results:
+                wandb.log({
+                    "test/f1_overall": self.results['f1_overall'],
+                    "test/accuracy_overall": self.results['accuracy_overall'],
+                })
+
             self.logger.info(f"** EXPERIMENT {self.config.experiment_name} COMPLETED SUCCESSFULLY **")
-            
+
         except Exception as e:
             self.logger.error(f"** EXPERIMENT {self.config.experiment_name} FAILED: {e} **")
             raise
-            
+        finally:
+            wandb.finish()
+
         return self.results
     
     def _get_predictions_from_output(self, reconstruction):
