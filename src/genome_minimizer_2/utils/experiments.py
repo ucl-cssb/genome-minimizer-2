@@ -476,6 +476,103 @@ class IntegratedExperimentRunner:
         except Exception as e:
             self.logger.error(f"Error generating summary plot: {e}")
     
+    def _upload_model_card(self):
+        """Generate and upload a model card (README.md) to this preset's HF branch."""
+        cfg = self.config
+        v = cfg.trainer_version
+
+        loss_descriptions = {
+            "v0": "Reconstruction + KL divergence (linear annealing)",
+            "v1": "Reconstruction + KL divergence (linear) + Gene abundance + L1 regularization",
+            "v2": "Reconstruction + KL divergence (cosine) + Gene abundance + L1 regularization",
+            "v3": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + L1 regularization",
+        }
+
+        arch = "1024 → 64" if v == "v0" else "512 → 32"
+        params = sum(p.numel() for p in self.model.parameters())
+
+        f1 = self.results.get("f1_overall", "N/A")
+        acc = self.results.get("accuracy_overall", "N/A")
+        epochs_trained = self.results.get("epochs_trained", "N/A")
+        if isinstance(f1, float):
+            f1 = f"{f1:.4f}"
+            acc = f"{acc:.4f}"
+
+        card = f"""---
+library_name: pytorch
+tags:
+  - vae
+  - genomics
+  - genome-minimization
+  - e-coli
+---
+
+# Genome Minimizer 2 — {v.upper()}
+
+VAE model for generating minimal *E. coli* genomes, trained with the **{v}** configuration.
+
+## Model Details
+
+| | |
+|---|---|
+| **Architecture** | VAE: 55,039 → {arch} (latent) |
+| **Parameters** | {params:,} |
+| **Loss** | {loss_descriptions[v]} |
+| **Epochs trained** | {epochs_trained} |
+| **Test F1** | {f1} |
+| **Test Accuracy** | {acc} |
+
+## Training Configuration
+
+| Parameter | Value |
+|---|---|
+| Hidden dim | {cfg.hidden_dim} |
+| Latent dim | {cfg.latent_dim} |
+| Learning rate | {cfg.learning_rate} |
+| Batch size | {cfg.batch_size} |
+| Beta range | {cfg.min_beta} → {cfg.max_beta} |
+| Gamma range | {cfg.gamma_start} → {cfg.gamma_end} |
+| L1 lambda | {cfg.lambda_l1} |
+| Weight (v3) | {cfg.weight} |
+| Checkpoint every | {cfg.checkpoint_every} epochs |
+
+## Files
+
+- `checkpoint-epoch-N.pt` — periodic checkpoints (model, optimizer, scheduler state)
+- `final.pt` — final checkpoint after training
+
+## Usage
+
+```python
+from huggingface_hub import hf_hub_download
+import torch
+from src.genome_minimizer_2.training.model import VAE
+
+path = hf_hub_download("McClain/genome-minimizer-2", "final.pt", revision="{v}")
+checkpoint = torch.load(path, map_location="cpu")
+
+model = VAE(input_dim=55039, hidden_dim={cfg.hidden_dim}, latent_dim={cfg.latent_dim})
+model.load_state_dict(checkpoint["model_state_dict"])
+```
+
+## Links
+
+- [W&B Experiment Tracking](https://wandb.ai/mcclain/genome-minimizer-2)
+- [GitHub Repository](https://github.com/ucl-cssb/genome-minimizer-2)
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(card)
+            tmp_path = f.name
+        self.hf_api.upload_file(
+            path_or_fileobj=tmp_path,
+            path_in_repo="README.md",
+            repo_id=cfg.hf_repo_id,
+            revision=self.hf_branch,
+        )
+        os.unlink(tmp_path)
+        self.logger.info(f"Model card uploaded to {cfg.hf_repo_id}@{self.hf_branch}/README.md")
+
     def run_complete_experiment(self):
         """Run the complete experiment pipeline"""
         self.logger.info(f"** START OF EXPERIMENT: {self.config.experiment_name} **")
@@ -504,6 +601,9 @@ class IntegratedExperimentRunner:
                     "test/f1_overall": self.results['f1_overall'],
                     "test/accuracy_overall": self.results['accuracy_overall'],
                 })
+
+            # Upload model card to HF branch
+            self._upload_model_card()
 
             self.logger.info(f"** EXPERIMENT {self.config.experiment_name} COMPLETED SUCCESSFULLY **")
 
