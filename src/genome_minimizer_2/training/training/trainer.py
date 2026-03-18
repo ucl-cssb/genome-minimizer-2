@@ -315,7 +315,7 @@ def create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1
     reconstructed probabilities for known essential genes are below 1.
     """
     config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1,
-                            patience=20, print_every=100)
+                            patience=200, print_every=100)
     trainer = VAETrainer(model, optimizer, scheduler, config)
 
     loss_components = [
