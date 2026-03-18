@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 # Import the loss components 
 from .loss_components import (
-    LossComponent, ReconstructionLoss, KLDivergenceLoss, 
-    GeneAbundanceLoss, L1RegularizationLoss
+    LossComponent, ReconstructionLoss, KLDivergenceLoss,
+    GeneAbundanceLoss, EssentialGeneLoss, L1RegularizationLoss
 )
 
 # Set deveice
@@ -297,11 +297,47 @@ def v2(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader,
     return trainer.train(train_loader, val_loader, folder)
 
 
-def v3(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader, 
+def v3(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader,
        min_beta, max_beta, gamma_start, gamma_end, weight, max_norm, lambda_l1):
     """Original v3 function using modular loss components"""
     trainer = create_v3_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
                                min_beta, max_beta, gamma_start, gamma_end, weight)
+    return trainer.train(train_loader, val_loader, folder)
+
+
+def create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
+                      essential_gene_indices, min_beta=0.1, max_beta=1.0,
+                      gamma_start=2.0, gamma_end=0.1, weight=1.0,
+                      essential_weight=1.0):
+    """Create trainer for v4: v3 + essential gene preservation loss.
+
+    Same as v3 but adds an EssentialGeneLoss that penalizes the model when
+    reconstructed probabilities for known essential genes are below 1.
+    """
+    config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1,
+                            patience=20, print_every=100)
+    trainer = VAETrainer(model, optimizer, scheduler, config)
+
+    loss_components = [
+        ReconstructionLoss(),
+        KLDivergenceLoss(scheduler_type="cosine", min_beta=min_beta, max_beta=max_beta, T=50),
+        GeneAbundanceLoss(gamma_start=gamma_start, gamma_end=gamma_end, weight=weight),
+        EssentialGeneLoss(essential_indices=essential_gene_indices,
+                          weight=essential_weight, ramp_start=0.0, ramp_end=1.0),
+        L1RegularizationLoss(lambda_l1=lambda_l1),
+    ]
+
+    trainer.setup_loss_components(loss_components)
+    return trainer
+
+
+def v4(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader,
+       min_beta, max_beta, gamma_start, gamma_end, weight, max_norm, lambda_l1,
+       essential_gene_indices, essential_weight=1.0):
+    """v4 function: v3 + essential gene preservation loss"""
+    trainer = create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
+                                essential_gene_indices, min_beta, max_beta,
+                                gamma_start, gamma_end, weight, essential_weight)
     return trainer.train(train_loader, val_loader, folder)
 
 
@@ -355,6 +391,15 @@ class VAETrainerBuilder:
         )
         return self
     
+    def with_essential_gene_loss(self, essential_indices: list, weight: float = 1.0,
+                                 ramp_start: float = 0.0, ramp_end: float = 1.0):
+        """Add essential gene preservation loss from loss_components.py"""
+        self.loss_components.append(
+            EssentialGeneLoss(essential_indices=essential_indices, weight=weight,
+                              ramp_start=ramp_start, ramp_end=ramp_end)
+        )
+        return self
+
     def with_l1_regularization(self, lambda_l1: float):
         """Add L1 regularization from loss_components.py"""
         self.config_params['lambda_l1'] = lambda_l1
@@ -391,5 +436,6 @@ class VAETrainerBuilder:
 __all__ = [
     'VAETrainer', 'VAETrainerBuilder', 'TrainingConfig',
     'create_v0_trainer', 'create_v1_trainer', 'create_v2_trainer', 'create_v3_trainer',
-    'v0', 'v1', 'v2', 'v3'
+    'create_v4_trainer',
+    'v0', 'v1', 'v2', 'v3', 'v4'
 ]

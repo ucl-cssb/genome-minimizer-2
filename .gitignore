@@ -4,6 +4,8 @@ models/
 data_exploration/
 essential_genes/
 minimized_genomes/
+evaluation/work/
+evaluation/results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

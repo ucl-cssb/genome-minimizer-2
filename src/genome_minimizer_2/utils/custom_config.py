@@ -32,10 +32,11 @@ class ExperimentConfig:
     max_beta: float = 1.0
     gamma_start: float = 1.0
     gamma_end: float = 0.1
-    weight: float = 1.0  # For v3
-    
+    weight: float = 1.0  # For v3/v4
+    essential_weight: float = 1.0  # For v4
+
     # Trainer version
-    trainer_version: str = "v2"  # v0, v1, v2, v3
+    trainer_version: str = "v2"  # v0, v1, v2, v3, v4
     
     # Scheduler parameters
     scheduler_step_size: int = 20
@@ -74,7 +75,7 @@ class ExperimentConfig:
             if field_type == bool:
                 prompt = f"{field_info.name} [{current_value}] (true/false): "
             elif field_type == str and field_info.name == "trainer_version":
-                prompt = f"{field_info.name} [{current_value}] (v0/v1/v2/v3): "
+                prompt = f"{field_info.name} [{current_value}] (v0/v1/v2/v3/v4): "
             else:
                 prompt = f"{field_info.name} [{current_value}]: "
             
@@ -211,7 +212,7 @@ def add_config_arguments(parser: argparse.ArgumentParser):
     
     # Trainer version
     trainer_group = parser.add_argument_group('Trainer Parameters')
-    trainer_group.add_argument('--trainer-version', choices=['v0', 'v1', 'v2', 'v3'], 
+    trainer_group.add_argument('--trainer-version', choices=['v0', 'v1', 'v2', 'v3', 'v4'],
                               help='Trainer version')
     
     # Scheduler parameters

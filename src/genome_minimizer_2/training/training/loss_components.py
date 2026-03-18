@@ -139,6 +139,34 @@ class L1RegularizationLoss(LossComponent):
         return "l1_regularization"
 
 
+class EssentialGeneLoss(LossComponent):
+    """Penalizes low reconstruction probability for essential genes.
+
+    Encourages the VAE to always output high probability (≈1) for gene
+    positions that correspond to known essential genes.  The loss is the
+    mean BCE between the reconstruction at essential positions and a
+    vector of ones, weighted by a linearly-annealed coefficient.
+    """
+
+    def __init__(self, essential_indices: list[int], weight: float = 1.0,
+                 ramp_start: float = 0.0, ramp_end: float = 1.0):
+        self.essential_idx = torch.tensor(essential_indices, dtype=torch.long, device=device)
+        self.weight = weight
+        self.ramp_start = ramp_start
+        self.ramp_end = ramp_end
+        self.n_epochs = 1000  # updated by trainer
+
+    def compute_loss(self, recon_x, data, mu, logvar, model, epoch, batch_idx):
+        ramp = self.ramp_start + (self.ramp_end - self.ramp_start) * epoch / self.n_epochs
+        essential_probs = recon_x[:, self.essential_idx]
+        target = torch.ones_like(essential_probs)
+        bce = nn.functional.binary_cross_entropy(essential_probs, target, reduction='sum')
+        return self.weight * ramp * bce
+
+    def get_name(self):
+        return "essential_gene"
+
+
 class L2RegularizationLoss(LossComponent):
     """L2 (weight decay) regularization loss"""
     
@@ -208,6 +236,7 @@ __all__ = [
     'ReconstructionLoss', 
     'KLDivergenceLoss', 
     'GeneAbundanceLoss',
+    'EssentialGeneLoss',
     'L1RegularizationLoss',
-    'L2RegularizationLoss', 
+    'L2RegularizationLoss',
 ]

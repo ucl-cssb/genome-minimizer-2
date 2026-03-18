@@ -18,8 +18,9 @@ from huggingface_hub import HfApi
 # Import modules
 from src.genome_minimizer_2.utils.custom_config import ExperimentConfig
 from src.genome_minimizer_2.training.training.trainer import (
-    v0, v1, v2, v3,
+    v0, v1, v2, v3, v4,
     create_v0_trainer, create_v1_trainer, create_v2_trainer, create_v3_trainer,
+    create_v4_trainer,
 )
 from src.genome_minimizer_2.training.evaluation.metrics import (
     calculate_reconstruction_metrics, 
@@ -33,7 +34,8 @@ from src.genome_minimizer_2.training.evaluation.visualise import (
 )
 from src.genome_minimizer_2.utils.extras import plot_loss_vs_epochs_graph
 from src.genome_minimizer_2.utils.directories import (
-    PROJECT_ROOT
+    PROJECT_ROOT,
+    ESSENTIAL_GENES_POSITIONS,
 )
 
 # Import data loading function from data exploration
@@ -118,6 +120,28 @@ def get_v3_config() -> ExperimentConfig:
         lambda_l1=0.01,
         trainer_version="v3",
         experiment_name="v3_model"
+    )
+
+
+def get_v4_config() -> ExperimentConfig:
+    """
+    v4 model:
+    Same as v3 (512 hidden, 32 latent, cosine annealing + weighted gene abundance + L1)
+    plus an essential gene preservation loss that pushes all known essential
+    gene outputs toward 1.
+    """
+    return ExperimentConfig(
+        hidden_dim=512,
+        latent_dim=32,
+        n_epochs=10000,
+        min_beta=0.1,
+        max_beta=1.0,
+        gamma_start=2.0,
+        gamma_end=0.1,
+        weight=1.0,
+        lambda_l1=0.01,
+        trainer_version="v4",
+        experiment_name="v4_model",
     )
 
 
@@ -316,8 +340,33 @@ class IntegratedExperimentRunner:
 
         return checkpoint_fn
 
+    def _load_essential_gene_indices(self) -> list[int]:
+        """Load flattened essential gene column indices from the preprocessed pickle."""
+        import pickle
+        # Check both possible paths (directories.py constant and actual preprocess output)
+        candidates = [
+            ESSENTIAL_GENES_POSITIONS,
+            os.path.join(PROJECT_ROOT, "data", "essential_genes", "essential_gene_positions.pkl"),
+        ]
+        pkl_path = None
+        for p in candidates:
+            if os.path.exists(p):
+                pkl_path = p
+                break
+        if pkl_path is None:
+            raise FileNotFoundError(
+                f"Essential gene positions not found. Checked: {candidates}. "
+                "Run --mode preprocess first."
+            )
+        with open(pkl_path, "rb") as f:
+            positions_dict = pickle.load(f)
+        # Flatten {gene_name: [idx, ...]} → sorted unique list of ints
+        indices = sorted({idx for idxs in positions_dict.values() for idx in idxs})
+        self.logger.info(f"Loaded {len(indices)} essential gene indices from {pkl_path}")
+        return indices
+
     def train_model(self):
-        """Train using v0-v3 trainer configs with HF Hub checkpointing."""
+        """Train using v0-v4 trainer configs with HF Hub checkpointing."""
         self.logger.info(f"Starting training with {self.config.trainer_version} configuration...")
         self.logger.info(f"Training for {self.config.n_epochs} epochs")
 
@@ -348,6 +397,15 @@ class IntegratedExperimentRunner:
                     self.model, self.optimizer, self.scheduler,
                     cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
                     cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end, cfg.weight,
+                )
+            elif cfg.trainer_version == "v4":
+                essential_indices = self._load_essential_gene_indices()
+                trainer = create_v4_trainer(
+                    self.model, self.optimizer, self.scheduler,
+                    cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
+                    essential_indices,
+                    cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end, cfg.weight,
+                    cfg.essential_weight,
                 )
             else:
                 raise ValueError(f"Unknown trainer version: {cfg.trainer_version}")
@@ -486,6 +544,7 @@ class IntegratedExperimentRunner:
             "v1": "Reconstruction + KL divergence (linear) + Gene abundance + L1 regularization",
             "v2": "Reconstruction + KL divergence (cosine) + Gene abundance + L1 regularization",
             "v3": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + L1 regularization",
+            "v4": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + Essential gene preservation + L1 regularization",
         }
 
         arch = "1024 → 64" if v == "v0" else "512 → 32"
