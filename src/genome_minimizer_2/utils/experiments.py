@@ -128,7 +128,8 @@ def get_v4_config() -> ExperimentConfig:
     v4 model:
     Same as v3 (512 hidden, 32 latent, cosine annealing + weighted gene abundance + L1)
     plus an essential gene preservation loss that pushes all known essential
-    gene outputs toward 1.
+    gene outputs toward 1.  LR schedule relaxed so learning doesn't stall
+    early (step_size=2000, gamma=0.5 → 5 halvings over 10k epochs).
     """
     return ExperimentConfig(
         hidden_dim=512,
@@ -142,6 +143,8 @@ def get_v4_config() -> ExperimentConfig:
         lambda_l1=0.01,
         trainer_version="v4",
         experiment_name="v4_model",
+        scheduler_step_size=2000,
+        scheduler_gamma=0.5,
     )
 
 
