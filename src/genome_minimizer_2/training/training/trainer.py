@@ -323,7 +323,7 @@ def create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1
         KLDivergenceLoss(scheduler_type="cosine", min_beta=min_beta, max_beta=max_beta, T=50),
         GeneAbundanceLoss(gamma_start=gamma_start, gamma_end=gamma_end, weight=weight),
         EssentialGeneLoss(essential_indices=essential_gene_indices,
-                          weight=essential_weight, ramp_start=0.0, ramp_end=1.0),
+                          weight=essential_weight, ramp_epochs=200),
         L1RegularizationLoss(lambda_l1=lambda_l1),
     ]
 
@@ -392,11 +392,11 @@ class VAETrainerBuilder:
         return self
     
     def with_essential_gene_loss(self, essential_indices: list, weight: float = 1.0,
-                                 ramp_start: float = 0.0, ramp_end: float = 1.0):
+                                 ramp_epochs: int = 200):
         """Add essential gene preservation loss from loss_components.py"""
         self.loss_components.append(
             EssentialGeneLoss(essential_indices=essential_indices, weight=weight,
-                              ramp_start=ramp_start, ramp_end=ramp_end)
+                              ramp_epochs=ramp_epochs)
         )
         return self
 

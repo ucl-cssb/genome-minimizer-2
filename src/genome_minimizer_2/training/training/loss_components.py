@@ -149,15 +149,13 @@ class EssentialGeneLoss(LossComponent):
     """
 
     def __init__(self, essential_indices: list[int], weight: float = 1.0,
-                 ramp_start: float = 0.0, ramp_end: float = 1.0):
+                 ramp_epochs: int = 200):
         self.essential_idx = torch.tensor(essential_indices, dtype=torch.long, device=device)
         self.weight = weight
-        self.ramp_start = ramp_start
-        self.ramp_end = ramp_end
-        self.n_epochs = 1000  # updated by trainer
+        self.ramp_epochs = ramp_epochs
 
     def compute_loss(self, recon_x, data, mu, logvar, model, epoch, batch_idx):
-        ramp = self.ramp_start + (self.ramp_end - self.ramp_start) * epoch / self.n_epochs
+        ramp = min(1.0, epoch / self.ramp_epochs) if self.ramp_epochs > 0 else 1.0
         essential_probs = recon_x[:, self.essential_idx]
         target = torch.ones_like(essential_probs)
         bce = nn.functional.binary_cross_entropy(essential_probs, target, reduction='sum')
