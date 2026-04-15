@@ -1,4 +1,6 @@
 data/
+!data/BC4_func_genes_indices.csv
+!data/essential_genes.csv
 figures/
 models/
 data_exploration/
