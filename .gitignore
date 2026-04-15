@@ -6,6 +6,10 @@ essential_genes/
 minimized_genomes/
 evaluation/work/
 evaluation/results/
+evaluation/data/
+
+# W&B
+wandb/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -217,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local TODO
+TODO.md
