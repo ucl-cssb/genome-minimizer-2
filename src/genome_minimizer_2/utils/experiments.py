@@ -153,24 +153,35 @@ class IntegratedExperimentRunner:
     
     def __init__(self, config: ExperimentConfig):
         self.config = config
-        
+
         # Setup logging for this experiment
         self.logger = logging.getLogger(f"{__name__}.{config.experiment_name}")
-        
+
+        # Seed all RNGs from config so --random-state actually does something.
+        torch.manual_seed(config.random_state)
+        np.random.seed(config.random_state)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(config.random_state)
+
         # Setup output directories
         self.figure_dir = os.path.join(PROJECT_ROOT, "models", config.experiment_name, "figures")
         self.model_dir = os.path.join(PROJECT_ROOT, "models", "trained_models", config.experiment_name)
-        
+
         os.makedirs(self.figure_dir, exist_ok=True)
         os.makedirs(self.model_dir, exist_ok=True)
-        
+
         self.logger.info(f"Created directories: {self.figure_dir}, {self.model_dir}")
 
-        # HF Hub — one branch per preset
-        self.hf_api = HfApi()
-        self.hf_api.create_repo(config.hf_repo_id, exist_ok=True)
-        self.hf_branch = config.trainer_version
-        self.hf_api.create_branch(config.hf_repo_id, branch=self.hf_branch, exist_ok=True)
+        # HF Hub — one branch per preset, or override via config.hf_branch (e.g. v4_opt for tuned variants).
+        self.hf_branch = config.hf_branch or config.trainer_version
+        if config.hf_upload:
+            self.hf_api = HfApi()
+            self.hf_api.create_repo(config.hf_repo_id, exist_ok=True)
+            self.hf_api.create_branch(config.hf_repo_id, branch=self.hf_branch, exist_ok=True)
+            self.logger.info(f"HF Hub uploads enabled → {config.hf_repo_id}@{self.hf_branch}")
+        else:
+            self.hf_api = None
+            self.logger.info("HF Hub uploads disabled (config.hf_upload=False)")
 
         # Data storage
         self.train_loader = None
@@ -268,12 +279,16 @@ class IntegratedExperimentRunner:
         
         data_tensor = torch.tensor(data_array, dtype=torch.float32)
         
-        # Split data
+        # Split data — uses config.random_state and config.test_size/val_ratio so seed sweeps work.
         train_data, temp_data, train_labels, temp_labels = train_test_split(
-            data_tensor, labels, test_size=0.3, random_state=12345
+            data_tensor, labels,
+            test_size=self.config.test_size,
+            random_state=self.config.random_state,
         )
         val_data, test_data, val_labels, test_labels = train_test_split(
-            temp_data, temp_labels, test_size=0.3333, random_state=12345
+            temp_data, temp_labels,
+            test_size=self.config.val_ratio,
+            random_state=self.config.random_state,
         )
         
         self.logger.info(f"Data splits - Train: {train_data.shape[0]}, Val: {val_data.shape[0]}, Test: {test_data.shape[0]}")
@@ -310,7 +325,9 @@ class IntegratedExperimentRunner:
         self.logger.info(f"Model parameters - Total: {total_params:,}, Trainable: {trainable_params:,}")
     
     def _save_checkpoint(self, model, optimizer, scheduler, epoch, path_in_repo):
-        """Save a checkpoint locally and upload to HF Hub on the preset branch."""
+        """Save a checkpoint locally and (if enabled) upload to HF Hub on the preset branch."""
+        if not self.config.hf_upload:
+            return
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
@@ -331,6 +348,8 @@ class IntegratedExperimentRunner:
 
     def _make_checkpoint_fn(self):
         """Create a checkpoint callback for the trainer."""
+        if not self.config.hf_upload:
+            return None
         checkpoint_every = self.config.checkpoint_every
         if checkpoint_every <= 0:
             return None
@@ -538,9 +557,20 @@ class IntegratedExperimentRunner:
             self.logger.error(f"Error generating summary plot: {e}")
     
     def _upload_model_card(self):
-        """Generate and upload a model card (README.md) to this preset's HF branch."""
+        """Generate and upload a model card (README.md) to this run's HF branch.
+
+        v0–v4 are distinguished by *loss function*. Branches whose name does NOT match
+        the trainer_version (e.g. ``v4_opt``) are hyperparameter-tuned variants of the
+        loss-equivalent baseline branch. The card spells out which deltas matter.
+        """
+        if not self.config.hf_upload:
+            self.logger.info("Skipping model card upload (hf_upload=False)")
+            return
+
         cfg = self.config
         v = cfg.trainer_version
+        branch = self.hf_branch
+        is_tuned_variant = branch != v
 
         loss_descriptions = {
             "v0": "Reconstruction + KL divergence (linear annealing)",
@@ -550,7 +580,16 @@ class IntegratedExperimentRunner:
             "v4": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + Essential gene preservation + L1 regularization",
         }
 
-        arch = "1024 → 64" if v == "v0" else "512 → 32"
+        # Default hyperparameters per loss-equivalent baseline (used to surface deltas).
+        baseline_hparams = {
+            "v0": {"hidden_dim": 1024, "latent_dim": 64,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.0,  "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
+            "v1": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
+            "v2": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
+            "v3": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 2.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
+            "v4": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 2.0, "essential_weight": 1.0, "scheduler_step_size": 2000, "scheduler_gamma": 0.5, "random_state": 12345},
+        }
+
+        arch = "1024 → 64" if cfg.hidden_dim == 1024 else f"{cfg.hidden_dim} → {cfg.latent_dim}"
         params = sum(p.numel() for p in self.model.parameters())
 
         f1 = self.results.get("f1_overall", "N/A")
@@ -559,6 +598,45 @@ class IntegratedExperimentRunner:
         if isinstance(f1, float):
             f1 = f"{f1:.4f}"
             acc = f"{acc:.4f}"
+
+        wandb_url = ""
+        try:
+            if wandb.run is not None:
+                wandb_url = wandb.run.get_url() or ""
+        except Exception:
+            wandb_url = ""
+
+        # Build the "differences from baseline" block for tuned variants.
+        deltas_block = ""
+        if is_tuned_variant:
+            base = baseline_hparams.get(v, {})
+            current = {k: getattr(cfg, k) for k in base.keys()}
+            diffs = [(k, base[k], current[k]) for k in base if base[k] != current[k]]
+            if diffs:
+                rows = "\n".join(f"| `{k}` | {b} | {c} |" for k, b, c in diffs)
+            else:
+                rows = "| _no deltas detected_ | — | — |"
+            deltas_block = f"""
+## Differences from baseline (`{v}`)
+
+This branch (**`{branch}`**) is a **hyperparameter-tuned variant** of `{v}`. The loss
+function is identical to `{v}`. Only the hyperparameters below differ:
+
+| Hyperparameter | `{v}` baseline | `{branch}` |
+|---|---|---|
+{rows}
+
+For loss-function deltas between numbered versions (v0 → v1 → … → v4), see the
+respective baseline branches.
+"""
+
+        header_title = f"Genome Minimizer 2 — {branch}"
+        intro = (
+            f"Hyperparameter-tuned variant of the **{v}** loss configuration. "
+            f"Same loss as `{v}`; differs only in hyperparameters (see below)."
+            if is_tuned_variant else
+            f"VAE model for generating minimal *E. coli* genomes, trained with the **{v}** loss configuration."
+        )
 
         card = f"""---
 library_name: pytorch
@@ -569,21 +647,22 @@ tags:
   - e-coli
 ---
 
-# Genome Minimizer 2 — {v.upper()}
+# {header_title}
 
-VAE model for generating minimal *E. coli* genomes, trained with the **{v}** configuration.
+{intro}
 
 ## Model Details
 
 | | |
 |---|---|
-| **Architecture** | VAE: 55,039 → {arch} (latent) |
+| **Branch** | `{branch}` |
+| **Loss configuration** | `{v}` ({loss_descriptions[v]}) |
+| **Architecture** | VAE: 55,039 → {arch} |
 | **Parameters** | {params:,} |
-| **Loss** | {loss_descriptions[v]} |
 | **Epochs trained** | {epochs_trained} |
-| **Test F1** | {f1} |
-| **Test Accuracy** | {acc} |
-
+| **Test F1 (overall)** | {f1} |
+| **Test Accuracy (overall)** | {acc} |
+{deltas_block}
 ## Training Configuration
 
 | Parameter | Value |
@@ -595,7 +674,10 @@ VAE model for generating minimal *E. coli* genomes, trained with the **{v}** con
 | Beta range | {cfg.min_beta} → {cfg.max_beta} |
 | Gamma range | {cfg.gamma_start} → {cfg.gamma_end} |
 | L1 lambda | {cfg.lambda_l1} |
-| Weight (v3) | {cfg.weight} |
+| Gene-abundance weight (v3+) | {cfg.weight} |
+| Essential-gene weight (v4+) | {cfg.essential_weight} |
+| Scheduler step / gamma | {cfg.scheduler_step_size} / {cfg.scheduler_gamma} |
+| Random state | {cfg.random_state} |
 | Checkpoint every | {cfg.checkpoint_every} epochs |
 
 ## Files
@@ -610,7 +692,7 @@ from huggingface_hub import hf_hub_download
 import torch
 from src.genome_minimizer_2.training.model import VAE
 
-path = hf_hub_download("McClain/genome-minimizer-2", "final.pt", revision="{v}")
+path = hf_hub_download("{cfg.hf_repo_id}", "final.pt", revision="{branch}")
 checkpoint = torch.load(path, map_location="cpu")
 
 model = VAE(input_dim=55039, hidden_dim={cfg.hidden_dim}, latent_dim={cfg.latent_dim})
@@ -619,8 +701,8 @@ model.load_state_dict(checkpoint["model_state_dict"])
 
 ## Links
 
-- [W&B Experiment Tracking](https://wandb.ai/mcclain/genome-minimizer-2)
-- [GitHub Repository](https://github.com/ucl-cssb/genome-minimizer-2)
+- [W&B project](https://wandb.ai/mcclain/genome-minimizer-2){f" — [this run]({wandb_url})" if wandb_url else ""}
+- [GitHub repository](https://github.com/ucl-cssb/genome-minimizer-2)
 """
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
@@ -646,6 +728,14 @@ model.load_state_dict(checkpoint["model_state_dict"])
             name=self.config.experiment_name,
             config=config_dict,
         )
+        # Make sweep runs distinguishable in the W&B UI: <experiment_name>-<run_id[:6]>
+        if wandb.run is not None and getattr(wandb.run, "id", None):
+            wandb.run.name = f"{self.config.experiment_name}-{wandb.run.id[:6]}"
+            existing_tags = list(wandb.run.tags or ())
+            for tag in (self.config.trainer_version, self.hf_branch):
+                if tag and tag not in existing_tags:
+                    existing_tags.append(tag)
+            wandb.run.tags = tuple(existing_tags)
 
         try:
             self.prep_data()

@@ -1,0 +1,45 @@
+# Phase B: noise floor measurement.
+# Run v1 (loss-equivalent baseline that hit F1=0.985 before the LR-scheduler bug
+# is corrected) with 3 seeds. Spread of test/f1_overall across these 3 runs is
+# the noise floor for the Phase C sweep — anything within that spread is noise.
+#
+# Notes:
+#   * Uses the FIXED LR schedule (step_size=2000, gamma=0.5) so we're measuring
+#     true seed variance, not "did the LR collapse to zero" variance.
+#   * --no-hf-upload: keeps these probe runs off the HF Hub.
+#   * --no-save-model / --no-generate-plots / --no-explore-latent-space:
+#     skip everything that doesn't affect test/f1_overall, to keep runs fast.
+
+program: main.py
+project: genome-minimizer-2
+method: grid
+metric:
+  name: test/f1_overall
+  goal: maximize
+parameters:
+  # Kebab-case keys so the ${args} macro produces flags argparse accepts
+  # (--random-state, not --random_state).
+  random-state:
+    values: [12345, 42, 7]
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --mode=experiment
+  - --trainer-version=v1
+  - --hidden-dim=512
+  - --latent-dim=32
+  - --n-epochs=500
+  - --learning-rate=0.001
+  - --batch-size=32
+  - --lambda-l1=0.01
+  - --scheduler-step-size=2000
+  - --scheduler-gamma=0.5
+  - --no-save-model
+  - --no-hf-upload
+  - --no-generate-plots
+  - --no-explore-latent-space
+  - --experiment-name=v1-noise-floor
+  # ${args} expands every entry in `parameters:` to `--<kebab-key>=<value>`.
+  # Param `random_state` -> `--random-state=12345`. Matches argparse exactly.
+  - ${args}
