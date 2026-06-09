@@ -17,51 +17,57 @@ Data Files → [Preprocess] → [Explore] → [Training] → [Sample] → [Minim
 
 ## Setup
 
-Clone the repository:
+This project is run with [uv](https://docs.astral.sh/uv/). Install it once:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then clone and sync — `uv sync` creates the virtualenv, installs every dependency
+from `pyproject.toml`, and installs the package itself (uv manages the Python
+version too, so no manual `python`/`pip` steps):
+
 ```bash
 git clone https://github.com/ucl-cssb/genome-minimizer-2
 cd genome-minimizer-2
+uv sync
 ```
 
-Install with uv (recommended) or a plain virtualenv — both are supported.
-
-### Option A — uv (recommended)
-
-[uv](https://docs.astral.sh/uv/) manages the virtualenv and dependencies from
-`pyproject.toml`:
-```bash
-uv sync                                # create .venv, install deps + the package
-uv run python main.py --mode preprocess
-```
-Prefix commands with `uv run`, or activate the env: `source .venv/bin/activate`.
-
-### Option B — plain virtualenv + pip
-
-For environments without uv, use the pinned `requirements.txt`:
-```bash
-python -m venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-pip install -r requirements.txt        # pinned dependencies
-pip install -e . --no-deps             # install the genome_minimizer_2 package
-```
-
-Either path lets you run the commands below as `python main.py ...` (with the env
-activated) or `uv run python main.py ...`.
+Run any command with `uv run` (e.g. `uv run python main.py ...`), or activate the
+env once with `source .venv/bin/activate` and drop the prefix. Next, fetch the
+inputs — see [Data Setup](#data-setup).
 
 ## Quick Start
 
+After [Data Setup](#data-setup), the full pipeline runs end to end:
+
 ```bash
-python main.py --mode preprocess
-python main.py --mode training --preset v0 --epochs 1
-python main.py --mode sample --model-path models/trained_models/v0_model/saved_VAE_v0.pt --genes-path data/essential_genes/essential_gene_positions.pkl --num-samples 100
-python main.py --mode convert-samples --genes-path data/binary_samples_default.npy
-python main.py --mode minimizer --genes-path data/seq_out.npy --single-file --output-file results.fasta
+# 1. Essential-gene positions from the reference genome
+uv run python main.py --mode preprocess
+
+# 2. Train a VAE (presets v0–v4; --no-hf-upload skips the HF checkpoint upload)
+uv run python main.py --mode training --preset v0 --epochs 1 --no-hf-upload
+
+# 3. Sample genomes from the trained model
+uv run python main.py --mode sample \
+    --model-path models/trained_models/v0_model/saved_VAE_v0.pt \
+    --genes-path src/genome_minimizer_2/data/essential_genes/essential_gene_positions.pkl \
+    --num-samples 100
+
+# 4. Convert the binary samples to gene-name lists
+uv run python main.py --mode convert-samples \
+    --genes-path models/v0_model/sampling_results/v0_binary_samples_default.npy
+
+# 5. Build minimized FASTA sequences (one record per genome)
+uv run python main.py --mode minimizer \
+    --genes-path seq_out_with_essentials.npy \
+    --genome-path data/GCF_000005845.2.gbff \
+    --single-file --output-file results.fasta
 ```
 
-All above commands can also be run with `uv run` prefix, for example:
-```bash
-uv run python main.py --mode preprocess
-```
+Also available: `explore` (dataset figures) and `experiment` (custom-config
+training). The analysis notebooks and the standalone sampling module are under
+[Analysis & sampling](#analysis--sampling).
 
 ## Data Setup
 
