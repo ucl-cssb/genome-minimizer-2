@@ -8,7 +8,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "pandas",
+    "pandas[pyarrow]",
     "numpy",
     "torch",
     "scikit-learn",
@@ -18,6 +18,14 @@ dependencies = [
     "biopython",
     "wandb",
     "huggingface_hub",
+    "marimo>=0.17.6",
+    "nbformat>=5.10.4",
+    "altair>=6.0.0",
+    "polars>=1.36.1",
+    "cobra>=0.31.1",
+    "pyarrow>=21.0.0",
+    "statsmodels>=0.14.6",
+    "vl-convert-python>=1.9.0.post1",
 ]
 
 [tool.poetry]

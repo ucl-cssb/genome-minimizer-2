@@ -1,0 +1,50 @@
+# Basic hyperparameter optimisation on model v0 (paper grid search).
+#
+# v0 loss = reconstruction (BCE) + linear-annealed KL only. This grid varies
+# ARCHITECTURE + learning rate, holding the v0 loss fixed, so the result is a
+# clean "which capacity / LR is best for the base VAE" feature-importance panel.
+#
+# Grid: 3 x 3 x 2 = 18 runs.
+#   hidden-dim    : 256, 512, 1024
+#   latent-dim    : 32, 64, 128
+#   learning-rate : 0.01, 0.001
+#
+# Single seed (random-state=12345, the canonical split that gives
+# train/val/test = 4167/1190/596) so the 18 runs differ only by the swept
+# params. W&B's sweep page auto-generates the parameter-importance + correlation
+# panel from test/f1_overall.
+
+program: main.py
+project: genome-minimizer-2
+method: grid
+metric:
+  name: test/f1_overall
+  goal: maximize
+parameters:
+  # Kebab-case keys so ${args} emits flags argparse accepts (--hidden-dim, etc.)
+  hidden-dim:
+    values: [256, 512, 1024]
+  latent-dim:
+    values: [32, 64, 128]
+  learning-rate:
+    values: [0.01, 0.001]
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --mode=experiment
+  - --trainer-version=v0
+  - --n-epochs=500            # early stopping cuts most runs short (~40 ep)
+  - --batch-size=32
+  - --min-beta=0.1            # v0 KL schedule (linear 0.1 -> 1.0), held fixed
+  - --max-beta=1.0
+  - --lambda-l1=0.0           # v0 has no L1 term
+  - --scheduler-step-size=2000
+  - --scheduler-gamma=0.5
+  - --random-state=12345      # canonical split -> 4167/1190/596
+  - --no-save-model
+  - --no-hf-upload
+  - --no-generate-plots
+  - --no-explore-latent-space
+  - --experiment-name=v0_grid
+  - ${args}                   # -> --hidden-dim=... --latent-dim=... --learning-rate=...

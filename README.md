@@ -17,28 +17,36 @@ Data Files → [Preprocess] → [Explore] → [Training] → [Sample] → [Minim
 
 ## Setup
 
-### Prerequisites
-- Python >=3.9,<3.11
-- pip (usually comes with Python)
+Clone the repository:
+```bash
+git clone https://github.com/ucl-cssb/genome-minimizer-2
+cd genome-minimizer-2
+```
 
-### Installation
+Install with uv (recommended) or a plain virtualenv — both are supported.
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd genome-minimizer-2
-   ```
+### Option A — uv (recommended)
 
-2. **Create virtual environment**:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+[uv](https://docs.astral.sh/uv/) manages the virtualenv and dependencies from
+`pyproject.toml`:
+```bash
+uv sync                                # create .venv, install deps + the package
+uv run python main.py --mode preprocess
+```
+Prefix commands with `uv run`, or activate the env: `source .venv/bin/activate`.
 
-3. **Install project**:
-   ```bash
-   pip install -e .
-   ```
+### Option B — plain virtualenv + pip
+
+For environments without uv, use the pinned `requirements.txt`:
+```bash
+python -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+pip install -r requirements.txt        # pinned dependencies
+pip install -e . --no-deps             # install the genome_minimizer_2 package
+```
+
+Either path lets you run the commands below as `python main.py ...` (with the env
+activated) or `uv run python main.py ...`.
 
 ## Quick Start
 
@@ -48,6 +56,11 @@ python main.py --mode training --preset v0 --epochs 1
 python main.py --mode sample --model-path models/trained_models/v0_model/saved_VAE_v0.pt --genes-path data/essential_genes/essential_gene_positions.pkl --num-samples 100
 python main.py --mode convert-samples --genes-path data/binary_samples_default.npy
 python main.py --mode minimizer --genes-path data/seq_out.npy --single-file --output-file results.fasta
+```
+
+All above commands can also be run with `uv run` prefix, for example:
+```bash
+uv run python main.py --mode preprocess
 ```
 
 ## Data Setup
@@ -84,7 +97,7 @@ python main.py --mode preprocess [--force-reprocess]
 ```bash
 python main.py --mode training --preset PRESET [--epochs N]
 ```
-- `--preset v0/v1/v2/v3`: Model architecture (required)
+- `--preset v0/v1/v2/v3/v4`: Model architecture (required)
 - `--epochs N`: Training epochs (default: 10000)
 
 ### Experiment
@@ -169,19 +182,40 @@ python main.py --mode minimizer \
 | v1 | 512→32 | + Gene abundance + L1 regularization |
 | v2 | 512→32 | + Cosine annealing |
 | v3 | 512→32 | + Weighted abundance |
+| v4 | 512→32 | + Essential-gene preservation loss |
 
-## Experiment Tracking & Checkpoints
+The hyperparameter-tuned `v4_opt` variant (lr 7.5e-4, essential-gene weight 0.5)
+shares the v4 architecture; see `sweeps/` for the W&B sweep configs.
 
-- **W&B**: [wandb.ai/mcclain/genome-minimizer-2](https://wandb.ai/mcclain/genome-minimizer-2) — training loss curves, per-component losses, learning rate, and test metrics (F1, accuracy)
-- **HF Hub**: [huggingface.co/McClain/genome-minimizer-2](https://huggingface.co/McClain/genome-minimizer-2) — model checkpoints, one branch per preset (`v0`, `v1`, `v2`, `v3`)
+## Checkpoints
+
+- **HF Hub**: [https://huggingface.co/UCL-CSSB/genome-minimizer-2](https://huggingface.co/UCL-CSSB/genome-minimizer-2) — model checkpoints, one branch per preset (`v0`–`v4`). The tuned `v4_opt` variant lives on [McClain/genome-minimizer-2](https://huggingface.co/McClain/genome-minimizer-2) (branch `v4_opt`).
 
 Checkpoints are saved every 500 epochs (configurable via `checkpoint_every` in `ExperimentConfig`) and include full training state (model, optimizer, scheduler) for resumable training.
 
 To download a checkpoint:
 ```python
 from huggingface_hub import hf_hub_download
-path = hf_hub_download("McClain/genome-minimizer-2", "final.pt", revision="v3")
+path = hf_hub_download("UCL-CSSB/genome-minimizer-2", "final.pt", revision="v3")
 ```
+
+## Analysis & sampling
+
+- **Reproducible sampling** — `genome_minimizer_2.sampling` is a single module for
+  both VAE sampling and the random baseline used in the paper:
+  ```bash
+  uv run python -m genome_minimizer_2.sampling vae    --variant v4_opt --num-samples 100
+  uv run python -m genome_minimizer_2.sampling random --num-samples 100
+  ```
+- **Cached generations** — the per-cohort gene lists / VAE samples used by the
+  analyses are on the HF bucket [McClain/minimal_genomes](https://huggingface.co/buckets/McClain/minimal_genomes)
+  (`hf buckets sync hf://buckets/McClain/minimal_genomes/ ./evaluation/data`).
+- **Notebooks & figures** — see [`notebooks/`](notebooks/README.md). The
+  `systems_analysis` notebook is a two-tier evaluation (KEGG module coverage +
+  iML1515 FBA growth) bundled because the final frontier analysis needs both
+  tiers; each tier is also a standalone script (`kegg_coverage.py`, `fba_growth.py`).
+- **Experiment tracking** — training logs to W&B (`mcclain/genome-minimizer-2`); the
+  hyperparameter sweep configs are in `sweeps/`.
 
 ## Output Structure
 
