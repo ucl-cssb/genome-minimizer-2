@@ -1,0 +1,5 @@
+run,final_train_loss,final_val_loss,total_epochs,test_f1_overall,test_acc_overall,f1_mean,f1_std,f1_min,f1_max,acc_mean,acc_std,acc_min,acc_max,source
+v0,307.4371,575.918,39,0.9843,0.9973,,,,,,,,,wandb:ucl-cssb/Genome-Minimizer/9ga1sps6
+v1,3518.9519,3775.7333,3644,0.9853,0.9975,,,,,,,,,wandb:ucl-cssb/Genome-Minimizer/caxw009z
+v2,4632.1385,4861.8389,982,0.9849,0.9974,,,,,,,,,wandb:ucl-cssb/Genome-Minimizer/28syr555
+v3,7218.1716,7380.9908,2363,0.9121,0.9861,,,,,,,,,wandb:ucl-cssb/Genome-Minimizer/xglrut19
