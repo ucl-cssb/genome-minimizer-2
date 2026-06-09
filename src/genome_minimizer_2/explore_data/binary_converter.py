@@ -8,11 +8,25 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def load_files(essentials_csv_path: str, ids_npy_path: str):
+def load_essential_set(essentials_csv_path: str) -> set:
     essential_genes = pd.read_csv(essentials_csv_path)
-
     col = "# gene" if "# gene" in essential_genes.columns else "gene"
-    essential_set = set(essential_genes[col].astype(str).str.strip())
+    return set(essential_genes[col].astype(str).str.strip())
+
+
+def add_essential_genes(gene_list, essential_set):
+    """Return gene_list with any missing essential genes added, sorted.
+
+    Single source of truth for inference-time essential-gene repair: used by
+    check_essential_genes (the file-writing pipeline) and by analysis notebooks.
+    """
+    if isinstance(gene_list, np.ndarray):
+        gene_list = gene_list.tolist()
+    return sorted(set(gene_list) | set(essential_set))
+
+
+def load_files(essentials_csv_path: str, ids_npy_path: str):
+    essential_set = load_essential_set(essentials_csv_path)
     id_lists = np.load(ids_npy_path, allow_pickle=True)
     return essential_set, id_lists
 
@@ -88,26 +102,21 @@ def check_essential_genes(essential_set, id_lists, out_ids_npy):
         if isinstance(gene_list, np.ndarray):
             gene_list = gene_list.tolist()
 
-        gene_set = set(gene_list)
-        # print(len(gene_set))
-        missing = essential_set - gene_set
-
+        missing = essential_set - set(gene_list)
         if missing:
             logging.warning(f"Sample {idx+1} is missing {len(missing)} essential genes; adding them")
-            gene_set.update(missing)
-            missing_after = essential_set - gene_set
-            # print(len(essential_set))
-            # print(len(gene_set))
-            if missing_after:
-                raise RuntimeError(
-                    f"Post-add verify failed for sample {idx+1}: still missing {len(missing_after)} essentials "
-                    f"(e.g., {list(missing_after)[:5]} ...)"
-                )
             n_fixed += 1
         else:
             n_ok += 1
 
-        updated_samples.append(sorted(gene_set))
+        repaired = add_essential_genes(gene_list, essential_set)
+        missing_after = essential_set - set(repaired)
+        if missing_after:
+            raise RuntimeError(
+                f"Post-add verify failed for sample {idx+1}: still missing {len(missing_after)} essentials "
+                f"(e.g., {list(missing_after)[:5]} ...)"
+            )
+        updated_samples.append(repaired)
 
         if (idx + 1) % 10 == 0:
             print(f"[progress] verified {idx+1}/{n_samples} samples")
