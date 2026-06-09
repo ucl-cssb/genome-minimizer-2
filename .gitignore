@@ -225,3 +225,8 @@ marimo/_lsp/
 
 # Local TODO
 TODO.md
+
+# AI assistant scaffolding (kept local, not part of the repo)
+AGENTS.md
+CLAUDE.md
+.codex/
