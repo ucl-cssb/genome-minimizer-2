@@ -211,9 +211,8 @@ path = hf_hub_download("UCL-CSSB/genome-minimizer-2", "final.pt", revision="v3")
   analyses are on the HF bucket [McClain/minimal_genomes](https://huggingface.co/buckets/McClain/minimal_genomes)
   (`hf buckets sync hf://buckets/McClain/minimal_genomes/ ./evaluation/data`).
 - **Notebooks & figures** — see [`notebooks/`](notebooks/README.md). The
-  `systems_analysis` notebook is a two-tier evaluation (KEGG module coverage +
-  iML1515 FBA growth) bundled because the final frontier analysis needs both
-  tiers; each tier is also a standalone script (`kegg_coverage.py`, `fba_growth.py`).
+  `systems_analysis` notebook is the two-tier evaluation (KEGG module coverage +
+  iML1515 FBA growth); `statistical_analysis` covers gene-enrichment.
 - **Experiment tracking** — training logs to W&B (`mcclain/genome-minimizer-2`); the
   hyperparameter sweep configs are in `sweeps/`.
 

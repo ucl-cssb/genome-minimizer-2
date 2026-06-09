@@ -14,7 +14,7 @@ edit, and run them.
 |------|------------|
 | `*.py` with `@app.cell` | marimo notebook **source** (`systems_analysis.py`, `statistical_analysis.py`) — the canonical, runnable form. |
 | `__marimo__/*.ipynb` | executed **Jupyter clones** of those notebooks, tracked so they render on GitHub without running anything. Regenerate after editing (see below). |
-| `*.py` plain scripts | headless reproductions — print results and write figures/tables (`kegg_coverage.py`, `fba_growth.py`, `statistical_analysis_report.py`, `figures.py`). |
+| `figures.py` | a headless script that writes the per-variant training-loss figures. |
 | `figures/` | scratch figure/table outputs (gitignored, regenerable). |
 | `training_summary/` | curated paper figures + `run_stats.csv` (tracked). |
 
@@ -47,21 +47,14 @@ minutes-not-hours stand-in for the whole-cell-model viability eval:
 
 The tiers are **bundled in one notebook** because the integrated analysis at the
 end (the size–viability frontier and chosen operating point) needs both at once.
-For headless, scripted reproduction each tier is also a standalone script.
 
-## Scripts
+## Figure scripts
 
-| File | What it does | Output |
-|------|--------------|--------|
-| `kegg_coverage.py` | Tier 1 — KEGG module coverage. | `figures/kegg_*.png`, `figures/kegg_summary.csv` |
-| `fba_growth.py` | Tier 2 — iML1515 FBA growth / viability. | `figures/fba_growth.png`, `figures/fba_summary.csv` |
-| `statistical_analysis_report.py` | Script form of `statistical_analysis.py`: enrichment summary, printed + CSV. | `figures/enrichment_*.csv` |
-| `figures.py` | Per-variant training-loss figures (Cell-Press styling). | `training_summary/<variant>_total_loss.png` |
+`figures.py` renders the per-variant training-loss figures (train + validation
+total loss, Cell-Press styling) from the local W&B export into
+`training_summary/<variant>_total_loss.png`:
 
 ```bash
-uv run python notebooks/kegg_coverage.py
-uv run python notebooks/fba_growth.py
-uv run python notebooks/statistical_analysis_report.py
 uv run python notebooks/figures.py
 ```
 
