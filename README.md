@@ -66,31 +66,27 @@ uv run python main.py --mode preprocess
 ## Data Setup
 
 `essential_genes.csv` and `BC4_func_genes_indices.csv` ship in the repo. The
-larger inputs are on the HF bucket
+larger inputs — pangenome matrix, phylogroups, the *E. coli* MG1655 reference
+genome, and the KEGG/FBA caches — are on the HF bucket
 [McClain/minimal_genomes](https://huggingface.co/buckets/McClain/minimal_genomes)
 (needs `huggingface_hub>=1.8.0`):
 
 ```bash
-# pangenome matrix, phylogroups, and the KEGG/FBA caches -> data/
 hf buckets sync hf://buckets/McClain/minimal_genomes/data ./data
 ```
-
-The reference genome (`data/wild_type_sequence.gb`, used by `preprocess` and
-`minimizer`) is the *E. coli* MG1655 assembly `GCF_000005845.2` — download it
-from NCBI and save it there.
 
 The per-cohort gene lists the notebooks read (`evaluation/data/<variant>/`) are
 regenerated from the trained checkpoints with `genome_minimizer_2.sampling`
 (see [`notebooks/`](notebooks/README.md)).
 
-After setup, `data/` holds:
+After syncing, `data/` holds:
 ```
 data/
 ├── F4_complete_presence_absence.csv    # pangenome presence/absence (bucket)
 ├── accessionID_phylogroup_BD.csv       # phylogroup classifications (bucket)
+├── GCF_000005845.2.gbff                # E. coli MG1655 reference genome (bucket)
 ├── essential_genes.csv                 # literature essential genes (in repo)
-├── kegg/   fba/iML1515.xml             # KEGG modules + FBA model (bucket)
-└── wild_type_sequence.gb               # E. coli reference genome (NCBI)
+└── kegg/   fba/iML1515.xml             # KEGG modules + FBA model (bucket)
 ```
 
 ## Commands
