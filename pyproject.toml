@@ -25,7 +25,7 @@ dependencies = [
     "cobra>=0.31.1",
     "pyarrow>=21.0.0",
     "statsmodels>=0.14.6",
-    "pydantic-ai>=0.8.1",
+    "vl-convert-python>=1.9.0.post1",
 ]
 
 [tool.poetry]

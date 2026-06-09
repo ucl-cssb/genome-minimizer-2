@@ -92,6 +92,7 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
+provenance.md
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -99,6 +100,7 @@ target/
 # IPython
 profile_default/
 ipython_config.py
+*.lock
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
@@ -115,8 +117,9 @@ ipython_config.py
 # UV
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
+#   commonly ignored for libraries. Here we ship a pinned requirements.txt
+#   instead, so the uv lockfile is not tracked.
+uv.lock
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
@@ -219,9 +222,12 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# Marimo
+# Marimo: keep the __marimo__/*.ipynb clones (rendered notebooks) under version
+# control; ignore the HTML render and the local session cache.
 marimo/_static/
 marimo/_lsp/
+**/__marimo__/*.html
+**/__marimo__/session/
 
 # Streamlit
 .streamlit/secrets.toml
@@ -233,3 +239,7 @@ TODO.md
 AGENTS.md
 CLAUDE.md
 .codex/
+.claude/
+
+# macOS
+.DS_Store
