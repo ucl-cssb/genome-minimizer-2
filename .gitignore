@@ -13,6 +13,9 @@ evaluation/data/
 # W&B
 wandb/
 
+# Paper figure / W&B-pull scratch (not for commit)
+paper_figures/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
