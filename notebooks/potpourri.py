@@ -73,7 +73,7 @@ def _(DATA_DIR, mo, pl):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **Random Genomes** In order to test if the VAE was actually learning anything we compare to a random baseline. This is implemented in `evaluation/generate_random_baseline.py`. What is does it calculate the core genome (genes in >95% of the dataset) keeps all of those, then samples the remaining genes until we have as many genes as we need for comparision (generally ~3300 which is how many our best VAE produced).
+    **Random Genomes** In order to test if the VAE was actually learning anything we compare to a random baseline. This is implemented in `genome_minimizer_2.sampling`. What is does it calculate the core genome (genes in >95% of the dataset) keeps all of those, then samples the remaining genes until we have as many genes as we need for comparision (generally ~3300 which is how many our best VAE produced).
     """)
     return
 
