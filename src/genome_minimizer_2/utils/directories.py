@@ -13,7 +13,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 TEN_K_DATASET = "data/F4_complete_presence_absence.csv"
 TEN_K_DATASET_PHYLOGROUPS = "data/accessionID_phylogroup_BD.csv"
 PAPER_ESSENTIAL_GENES = "data/essential_genes.csv"
-WILD_TYPE_SEQUENCE = "data/wild_type_sequence.gb"
+WILD_TYPE_SEQUENCE = "data/GCF_000005845.2.gbff"  # E. coli MG1655 RefSeq (GCF_000005845.2)
 SAMPLES_BINARY = "data/data_full_validated.npy"
 
 # Generated data paths

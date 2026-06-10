@@ -135,13 +135,14 @@ def parse_arguments():
     # Parse known args first to check the mode
     known_args, _ = parser.parse_known_args()
     
-    # Add experiment-specific arguments only if in experiment mode
-    if known_args.mode == 'experiment':
+    # Add the full config arguments for the modes that build an ExperimentConfig
+    # (training and experiment), so flags like --no-hf-upload work for both.
+    if known_args.mode in ('experiment', 'training'):
         try:
             from src.genome_minimizer_2.utils.custom_config import add_config_arguments
             add_config_arguments(parser)
         except ImportError:
-            print("✗  Could not load experiment config - experiment mode may not work")
+            print("✗  Could not load experiment config - experiment/training config flags may not work")
     
     return parser.parse_args()
 
@@ -477,6 +478,18 @@ def run_single_experiment(args):
         # Override epochs if specified
         if args.epochs:
             config.n_epochs = args.epochs
+
+        # Apply any config flags the user explicitly passed (e.g. --no-hf-upload,
+        # --essential-weight). Only fields present on args with a non-None value
+        # are applied, so the preset's defaults win otherwise.
+        from dataclasses import fields as _dataclass_fields
+        _overrides = {
+            f.name: getattr(args, f.name)
+            for f in _dataclass_fields(config)
+            if getattr(args, f.name, None) is not None
+        }
+        if _overrides:
+            config.update_from_dict(_overrides)
 
         print(f"\n{'='*80}")
         print(f"Running {config.experiment_name} experiment")
