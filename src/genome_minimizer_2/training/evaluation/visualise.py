@@ -12,7 +12,10 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from typing import List, Optional
 import os
-from src.genome_minimizer_2.utils.extras import get_latent_variables
+from src.genome_minimizer_2.utils.extras import (
+    get_latent_variables, plot_loss_components,
+    _PUB_RC, _TRAIN_COLOR, _VAL_COLOR, _TEST_COLOR,
+)
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -176,84 +179,98 @@ def plot_reconstruction_examples(model, test_loader, output_dir: str,
                     break
 
 
-def create_training_summary_plot(train_losses: List[float], val_losses: List[float], 
-                                f1_scores: List[float], accuracy_scores: List[float],
-                                output_dir: str, model_name: str = "VAE") -> None:
+def _distribution_panel(ax, train_vals, test_vals, xlabel, title):
+    """Overlaid train-vs-test density histogram with mean markers."""
+    train_vals = np.asarray(train_vals, dtype=float)
+    test_vals = np.asarray(test_vals, dtype=float)
+    lo = min(train_vals.min(), test_vals.min())
+    hi = max(train_vals.max(), test_vals.max())
+    bins = np.linspace(lo, hi, 28) if hi > lo else 28
+    ax.hist(train_vals, bins=bins, color=_TRAIN_COLOR, alpha=0.55, density=True, label="Train")
+    ax.hist(test_vals, bins=bins, color=_TEST_COLOR, alpha=0.55, density=True, label="Test")
+    ax.axvline(train_vals.mean(), color=_TRAIN_COLOR, ls="--", lw=1.2)
+    ax.axvline(test_vals.mean(), color=_TEST_COLOR, ls="--", lw=1.2)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Density")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(True, axis="y", ls=":", lw=0.6, alpha=0.4)
+    ax.legend()
+
+
+def create_training_summary_plot(train_losses: List[float], val_losses: List[float],
+                                f1_test: List[float], accuracy_test: List[float],
+                                output_dir: str, model_name: str = "VAE",
+                                f1_train: Optional[List[float]] = None,
+                                accuracy_train: Optional[List[float]] = None) -> None:
     """
-    Create a comprehensive summary plot of training results.
-    
+    Publication-quality training summary: total loss curve, train-vs-test
+    distributions of per-sample reconstruction F1 and accuracy, and a compact
+    stats table.
+
     Args:
-        train_losses: Training loss values
-        val_losses: Validation loss values
-        f1_scores: Per-sample F1 scores
-        accuracy_scores: Per-sample accuracy scores
-        output_dir: Directory to save plots
-        model_name: Name of the model for titles
+        train_losses, val_losses: per-epoch total loss.
+        f1_test, accuracy_test: per-sample reconstruction metrics on the test set.
+        output_dir: directory to save into.
+        model_name: title / filename stem.
+        f1_train, accuracy_train: per-sample metrics on the train set. When given,
+            the distribution panels overlay train vs test; otherwise test only.
     """
     os.makedirs(output_dir, exist_ok=True)
-    
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10), dpi=300)
-    
-    # Training curves
-    epochs = range(1, len(train_losses) + 1)
-    axes[0, 0].plot(epochs, train_losses, label='Training Loss', color='blue', alpha=0.8)
-    axes[0, 0].plot(epochs, val_losses, label='Validation Loss', color='red', alpha=0.8)
-    axes[0, 0].set_xlabel('Epochs')
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].set_title(f'{model_name} Training Curves')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # F1 score distribution
-    axes[0, 1].hist(f1_scores, bins=30, alpha=0.7, color='green', edgecolor='black')
-    axes[0, 1].axvline(np.mean(f1_scores), color='darkgreen', linestyle='--', 
-                       label=f'Mean: {np.mean(f1_scores):.3f}')
-    axes[0, 1].set_xlabel('F1 Score')
-    axes[0, 1].set_ylabel('Frequency')
-    axes[0, 1].set_title('F1 Score Distribution')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Accuracy distribution
-    axes[1, 0].hist(accuracy_scores, bins=30, alpha=0.7, color='purple', edgecolor='black')
-    axes[1, 0].axvline(np.mean(accuracy_scores), color='darkviolet', linestyle='--', 
-                       label=f'Mean: {np.mean(accuracy_scores):.3f}')
-    axes[1, 0].set_xlabel('Accuracy Score')
-    axes[1, 0].set_ylabel('Frequency')
-    axes[1, 0].set_title('Accuracy Distribution')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # Summary statistics
-    axes[1, 1].axis('off')
-    summary_text = f"""
-    {model_name} Training Summary
 
-    Final Training Loss: {train_losses[-1]:.4f}
-    Final Validation Loss: {val_losses[-1]:.4f}
+    # Fall back to test-only if train metrics weren't supplied.
+    f1_tr = np.asarray(f1_train if f1_train is not None else f1_test, dtype=float)
+    acc_tr = np.asarray(accuracy_train if accuracy_train is not None else accuracy_test, dtype=float)
+    f1_te = np.asarray(f1_test, dtype=float)
+    acc_te = np.asarray(accuracy_test, dtype=float)
 
-    F1 Score Statistics:
-    - Mean: {np.mean(f1_scores):.4f}
-    - Std:  {np.std(f1_scores):.4f}
-    - Min:  {np.min(f1_scores):.4f}
-    - Max:  {np.max(f1_scores):.4f}
+    with plt.rc_context(_PUB_RC):
+        fig, axes = plt.subplots(2, 2, figsize=(8.2, 6.4), constrained_layout=True)
 
-    Accuracy Statistics:
-    - Mean: {np.mean(accuracy_scores):.4f}
-    - Std:  {np.std(accuracy_scores):.4f}
-    - Min:  {np.min(accuracy_scores):.4f}
-    - Max:  {np.max(accuracy_scores):.4f}
+        # Total loss
+        ep = np.arange(1, len(train_losses) + 1)
+        axes[0, 0].plot(ep, train_losses, color=_TRAIN_COLOR, lw=1.6, label="Train")
+        axes[0, 0].plot(ep, val_losses, color=_VAL_COLOR, lw=1.6, ls="--", label="Validation")
+        axes[0, 0].set_title("Total loss")
+        axes[0, 0].set_xlabel("Epoch")
+        axes[0, 0].set_ylabel("Loss")
+        axes[0, 0].spines["top"].set_visible(False)
+        axes[0, 0].spines["right"].set_visible(False)
+        axes[0, 0].grid(True, ls=":", lw=0.6, alpha=0.4)
+        axes[0, 0].legend()
+        axes[0, 0].ticklabel_format(axis="y", style="sci", scilimits=(-3, 4))
 
-    Total Epochs: {len(train_losses)}
-    """
-    axes[1, 1].text(0.1, 0.9, summary_text, transform=axes[1, 1].transAxes, 
-                     fontsize=11, verticalalignment='top', 
-                     bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5))
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{model_name}_training_summary.pdf"), 
-               format="pdf", bbox_inches="tight")
-    plt.close()
+        # Train-vs-test metric distributions
+        _distribution_panel(axes[0, 1], f1_tr, f1_te, "F1 score", "Reconstruction F1")
+        _distribution_panel(axes[1, 0], acc_tr, acc_te, "Accuracy", "Reconstruction accuracy")
+
+        # Compact stats table
+        ax = axes[1, 1]
+        ax.axis("off")
+        rows = [
+            ("", "Train", "Test"),
+            ("F1 (mean)", f"{f1_tr.mean():.3f}", f"{f1_te.mean():.3f}"),
+            ("Accuracy (mean)", f"{acc_tr.mean():.3f}", f"{acc_te.mean():.3f}"),
+            ("Final loss", f"{train_losses[-1]:.2e}", f"{val_losses[-1]:.2e}"),
+            ("Epochs", f"{len(train_losses)}", ""),
+        ]
+        tbl = ax.table(cellText=rows, loc="center", cellLoc="center")
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(9)
+        tbl.scale(1, 1.6)
+        for (r, c), cell in tbl.get_celld().items():
+            cell.set_edgecolor("#cccccc")
+            if r == 0:
+                cell.set_text_props(fontweight="bold")
+            if c == 0:
+                cell.set_text_props(ha="left")
+
+        fig.suptitle(f"{model_name} training summary", fontsize=12, fontweight="bold")
+        for ext in ("pdf", "png"):
+            fig.savefig(os.path.join(output_dir, f"{model_name}_training_summary.{ext}"),
+                        bbox_inches="tight")
+        plt.close(fig)
 
 
 # Export all functions

@@ -32,7 +32,7 @@ from src.genome_minimizer_2.training.evaluation.visualise import (
     plot_latent_space_pca,
     create_training_summary_plot
 )
-from src.genome_minimizer_2.utils.extras import plot_loss_vs_epochs_graph
+from src.genome_minimizer_2.utils.extras import plot_loss_vs_epochs_graph, plot_loss_components
 from src.genome_minimizer_2.utils.directories import (
     PROJECT_ROOT,
     ESSENTIAL_GENES_POSITIONS,
@@ -444,6 +444,11 @@ class IntegratedExperimentRunner:
             self.results['train_loss_vals'] = train_loss_vals
             self.results['val_loss_vals'] = val_loss_vals
             self.results['epochs_trained'] = epochs
+            # Per-component loss histories (reconstruction, KL, etc.) for the
+            # component-breakdown plot. The tracker keeps them; train() only
+            # returns the totals.
+            self.results['train_loss_components'] = dict(trainer.loss_tracker.train_losses)
+            self.results['val_loss_components'] = dict(trainer.loss_tracker.val_losses)
 
             self.logger.info(f"Training completed after {epochs} epochs")
             self.logger.info(f"Final train loss: {train_loss_vals[-1]:.4f}")
@@ -475,12 +480,25 @@ class IntegratedExperimentRunner:
             epochs = np.linspace(1, self.results['epochs_trained'], num=self.results['epochs_trained'])
             name = os.path.join(self.figure_dir, f"{self.config.trainer_version}_train_val_loss.pdf")
             plot_loss_vs_epochs_graph(
-                epochs=epochs, 
-                train_loss_vals=self.results['train_loss_vals'], 
-                val_loss_vals=self.results['val_loss_vals'], 
+                epochs=epochs,
+                train_loss_vals=self.results['train_loss_vals'],
+                val_loss_vals=self.results['val_loss_vals'],
                 fig_name=name
             )
             self.logger.info(f"Loss comparison plot saved to {name}")
+
+            # Publication-quality breakdown into loss components (total,
+            # reconstruction, KL, ...). Both PDF (for the paper) and PNG.
+            if 'train_loss_components' in self.results:
+                base = os.path.join(self.figure_dir, f"{self.config.trainer_version}_loss_components")
+                for ext in ("pdf", "png"):
+                    plot_loss_components(
+                        self.results['train_loss_components'],
+                        self.results['val_loss_components'],
+                        fig_name=f"{base}.{ext}",
+                        title=f"VAE training — preset {self.config.trainer_version}",
+                    )
+                self.logger.info(f"Loss-component plot saved to {base}.pdf / .png")
         except Exception as e:
             self.logger.error(f"Error generating comparison plots: {e}")
     
@@ -501,6 +519,14 @@ class IntegratedExperimentRunner:
             self.results['accuracy_overall'] = overall_accuracy
             self.results['f1_scores_per_sample'] = f1_scores
             self.results['accuracy_scores_per_sample'] = accuracy_scores
+
+            # Same per-sample metrics on the train set, for the train-vs-test
+            # distribution panels in the summary figure.
+            _, _, f1_train, accuracy_train = calculate_reconstruction_metrics(
+                self.model, self.train_loader
+            )
+            self.results['f1_scores_per_sample_train'] = f1_train
+            self.results['accuracy_scores_per_sample_train'] = accuracy_train
             
             self.logger.info(f"Overall F1 Score: {overall_f1:.4f}")
             self.logger.info(f"Overall Accuracy: {overall_accuracy:.4f}")
@@ -551,7 +577,9 @@ class IntegratedExperimentRunner:
                 self.results['f1_scores_per_sample'],
                 self.results['accuracy_scores_per_sample'],
                 self.figure_dir,
-                self.config.experiment_name
+                self.config.experiment_name,
+                f1_train=self.results.get('f1_scores_per_sample_train'),
+                accuracy_train=self.results.get('accuracy_scores_per_sample_train'),
             )
             self.logger.info("Summary plot generated")
         except Exception as e:
