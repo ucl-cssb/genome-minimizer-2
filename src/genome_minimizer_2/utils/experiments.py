@@ -584,7 +584,49 @@ class IntegratedExperimentRunner:
             self.logger.info("Summary plot generated")
         except Exception as e:
             self.logger.error(f"Error generating summary plot: {e}")
-    
+
+    def save_numeric_data(self):
+        """Persist the numbers behind the figures as CSVs — source data for the
+        loss-component and summary plots, so they can be re-plotted or analysed
+        without retraining."""
+        import csv
+        ver = self.config.trainer_version
+
+        # Per-epoch loss components (train + val): one row per epoch.
+        tr = self.results.get('train_loss_components')
+        va = self.results.get('val_loss_components') or {}
+        if tr:
+            comps = ['total'] + [c for c in tr if c != 'total']
+            n_epochs = len(tr.get('total', []))
+            path = os.path.join(self.figure_dir, f"{ver}_loss_history.csv")
+            with open(path, 'w', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(['epoch'] + [f'train_{c}' for c in comps] + [f'val_{c}' for c in comps])
+                for i in range(n_epochs):
+                    row = [i + 1]
+                    row += [tr[c][i] for c in comps]
+                    row += [va[c][i] if c in va and i < len(va[c]) else '' for c in comps]
+                    w.writerow(row)
+            self.logger.info(f"Loss history saved to {path}")
+
+        # Per-sample reconstruction metrics (train + test): one row per sample.
+        def _rows(split, f1_key, acc_key):
+            f1 = self.results.get(f1_key)
+            acc = self.results.get(acc_key)
+            if f1 is None or acc is None:
+                return []
+            return [(split, float(a), float(b)) for a, b in zip(f1, acc)]
+
+        rows = (_rows('train', 'f1_scores_per_sample_train', 'accuracy_scores_per_sample_train')
+                + _rows('test', 'f1_scores_per_sample', 'accuracy_scores_per_sample'))
+        if rows:
+            path = os.path.join(self.figure_dir, f"{ver}_reconstruction_metrics.csv")
+            with open(path, 'w', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(['split', 'f1', 'accuracy'])
+                w.writerows(rows)
+            self.logger.info(f"Per-sample metrics saved to {path}")
+
     def _upload_model_card(self):
         """Generate and upload a model card (README.md) to this run's HF branch.
 
@@ -778,6 +820,7 @@ model.load_state_dict(checkpoint["model_state_dict"])
             self.calculate_metrics()
             self.explore_latent_space()
             self.generate_summary_plot()
+            self.save_numeric_data()
 
             # Log final metrics to wandb
             if wandb.run is not None and 'f1_overall' in self.results:
