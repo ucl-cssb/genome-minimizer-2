@@ -64,10 +64,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Run integrated VAE genomics experiments')
     
     # Base argiments
-    parser.add_argument('--mode', 
-                        choices=['training', 'experiment', 'minimizer', 'explore', 'preprocess', 'sample', 'convert-samples'],
-                        default='training', 
-                        help='Run mode: training experiment, custom experiment, evaluate existing model, genome minimizer, data exploration, preprocessing, or sampling')
+    parser.add_argument('--mode',
+                        choices=['setup-data', 'training', 'experiment', 'minimizer', 'explore', 'preprocess', 'sample', 'convert-samples'],
+                        default='training',
+                        help='Run mode: setup-data (download inputs from HuggingFace), training, experiment, minimizer, explore, preprocess, sample, or convert-samples')
     
     # Training/experiment arguments
     parser.add_argument('--preset',
@@ -131,6 +131,11 @@ def parse_arguments():
     parser.add_argument('--force-reprocess',
                         action='store_true',
                         help='Force reprocessing of essential gene positions even if file exists')
+
+    # setup-data arguments
+    parser.add_argument('--training-data-only',
+                        action='store_true',
+                        help='setup-data: download training data only, skip pre-computed samples')
     
     # Parse known args first to check the mode
     known_args, _ = parser.parse_known_args()
@@ -675,9 +680,14 @@ def main():
             return 1
     
     results = None
-    
+
     try:
-        if args.mode == 'explore':
+        if args.mode == 'setup-data':
+            from src.genome_minimizer_2.setup_data import setup_data
+            success = setup_data(training_only=args.training_data_only)
+            return 0 if success else 1
+
+        elif args.mode == 'explore':
             success = run_data_exploration()
             return 0 if success else 1
             

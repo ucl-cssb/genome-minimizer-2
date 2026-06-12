@@ -257,9 +257,10 @@ class IntegratedExperimentRunner:
             for phylogroup, count in phylogroup_counts.items():
                 self.logger.info(f"  {phylogroup}: {count}")
             
-            # Extract data arrays
-            data_array_t = merged_df.iloc[:, :-1].values  # All columns except phylogroup
-            phylogroups_array = merged_df['Phylogroup'].values
+            # Extract data arrays. .to_numpy() (not .values) so pyarrow-backed
+            # columns convert cleanly — .values returns an arrow array sklearn can't index.
+            data_array_t = merged_df.iloc[:, :-1].to_numpy()  # All columns except phylogroup
+            phylogroups_array = merged_df['Phylogroup'].to_numpy()
             
             self.logger.info(f"Data array shape: {data_array_t.shape}")
             self.logger.info(f"Phylogroups array shape: {phylogroups_array.shape}")
@@ -721,13 +722,16 @@ model.load_state_dict(checkpoint["model_state_dict"])
         """Run the complete experiment pipeline"""
         self.logger.info(f"** START OF EXPERIMENT: {self.config.experiment_name} **")
 
-        # Init wandb
-        config_dict = {f.name: getattr(self.config, f.name) for f in fields(self.config)}
-        wandb.init(
-            project="genome-minimizer-2",
-            name=self.config.experiment_name,
-            config=config_dict,
-        )
+        # Init wandb — only when explicitly enabled, so a fresh checkout trains
+        # without a W&B login. Everything below guards on wandb.run, so a skipped
+        # init just means no logging.
+        if self.config.wandb_log:
+            config_dict = {f.name: getattr(self.config, f.name) for f in fields(self.config)}
+            wandb.init(
+                project="genome-minimizer-2",
+                name=self.config.experiment_name,
+                config=config_dict,
+            )
         # Make sweep runs distinguishable in the W&B UI: <experiment_name>-<run_id[:6]>
         if wandb.run is not None and getattr(wandb.run, "id", None):
             wandb.run.name = f"{self.config.experiment_name}-{wandb.run.id[:6]}"
@@ -748,7 +752,7 @@ model.load_state_dict(checkpoint["model_state_dict"])
             self.generate_summary_plot()
 
             # Log final metrics to wandb
-            if 'f1_overall' in self.results:
+            if wandb.run is not None and 'f1_overall' in self.results:
                 wandb.log({
                     "test/f1_overall": self.results['f1_overall'],
                     "test/accuracy_overall": self.results['accuracy_overall'],
@@ -763,7 +767,8 @@ model.load_state_dict(checkpoint["model_state_dict"])
             self.logger.error(f"** EXPERIMENT {self.config.experiment_name} FAILED: {e} **")
             raise
         finally:
-            wandb.finish()
+            if wandb.run is not None:
+                wandb.finish()
 
         return self.results
     
