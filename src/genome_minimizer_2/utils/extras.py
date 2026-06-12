@@ -382,11 +382,10 @@ def plot_loss_components(train_losses, val_losses, fig_name, title=None):
 
         handles = [h for h in (train_handle, val_handle) if h is not None]
         if handles:
-            # Bottom-centre legend stays clear of the title and any blank panels.
-            fig.legend(
-                handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.04),
-                ncol=len(handles),
-            )
+            # "outside lower center" reserves its own space under the panels, so
+            # the legend never overlaps the bottom-row x-axis labels — which it
+            # otherwise does in the short single-row (3-panel) layout.
+            fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
         if title:
             fig.suptitle(title, fontsize=11, fontweight="bold")
 
