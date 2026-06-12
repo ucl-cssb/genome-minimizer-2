@@ -26,7 +26,11 @@ class TrainingConfig:
     n_epochs: int
     max_norm: float
     lambda_l1: float = 0.0
-    patience: int = 10
+    # Stop only on a genuine validation plateau: 200 epochs with no improvement
+    # > min_delta. High enough to ignore noise (the old patience=10 stopped v0
+    # at 38 on noise), low enough to save time once truly converged. Models that
+    # keep improving run to the full n_epochs.
+    patience: int = 200
     min_delta: float = 1e-4
     print_every: int = 100
 
@@ -241,7 +245,7 @@ def create_v1_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1
 def create_v2_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
                      min_beta=0.0, max_beta=1.0, gamma_start=1.0, gamma_end=0.1):
     """Create trainer equivalent to v2 function using loss components"""
-    config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1, patience=10)
+    config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1, patience=200)
     trainer = VAETrainer(model, optimizer, scheduler, config)
     
     loss_components = [
@@ -259,7 +263,7 @@ def create_v3_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1
                      min_beta=0.1, max_beta=1.0, gamma_start=2.0, gamma_end=0.1, weight=1.0):
     """Create trainer equivalent to v3 function using loss components"""
     config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1, 
-                           patience=20, print_every=100)
+                           patience=200, print_every=100)
     trainer = VAETrainer(model, optimizer, scheduler, config)
     
     loss_components = [
