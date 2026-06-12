@@ -395,8 +395,8 @@ def create_pca_phylogroup_plot(merged_df: pd.DataFrame) -> None:
     """Create Figure 2a: PCA visualization colored by phylogroup."""
     logger.info("Creating PCA by phylogroup plot (Figure 2a)...")
     
-    gene_data = merged_df.iloc[:, :-1].values
-    phylogroups = merged_df['Phylogroup'].values
+    gene_data = merged_df.iloc[:, :-1].to_numpy()
+    phylogroups = merged_df['Phylogroup'].to_numpy()
     
     pca = PCA(n_components=2)
     data_pca = pca.fit_transform(gene_data)

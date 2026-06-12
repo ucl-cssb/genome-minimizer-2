@@ -175,13 +175,14 @@ class VAETrainer:
             # Learning rate scheduling
             self.scheduler.step()
 
-            # Log to wandb
-            log_dict = {"epoch": epoch + 1, "lr": self.scheduler.get_last_lr()[0]}
-            for name, val in train_losses.items():
-                log_dict[f"train/{name}"] = val
-            for name, val in val_losses.items():
-                log_dict[f"val/{name}"] = val
-            wandb.log(log_dict, step=epoch + 1)
+            # Log to wandb (only when a run was initialized; gated by config.wandb_log)
+            if wandb.run is not None:
+                log_dict = {"epoch": epoch + 1, "lr": self.scheduler.get_last_lr()[0]}
+                for name, val in train_losses.items():
+                    log_dict[f"train/{name}"] = val
+                for name, val in val_losses.items():
+                    log_dict[f"val/{name}"] = val
+                wandb.log(log_dict, step=epoch + 1)
 
             # Checkpoint
             if self.checkpoint_fn:

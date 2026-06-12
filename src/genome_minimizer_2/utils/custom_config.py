@@ -49,9 +49,12 @@ class ExperimentConfig:
 
     # Checkpointing parameters
     checkpoint_every: int = 500  # Save checkpoint every N epochs (0 to disable)
-    hf_repo_id: str = "McClain/genome-minimizer-2"
-    hf_upload: bool = True  # When False, no repo/branch creation, no checkpoint upload, no model card upload
+    hf_repo_id: str = "UCL-CSSB/genome-minimizer-2"
+    hf_upload: bool = False  # Off by default. Enable with --hf-upload (needs HF write access).
     hf_branch: str = ""  # Empty -> falls back to trainer_version. Use e.g. "v4_opt" for tuned variants.
+
+    # Experiment tracking
+    wandb_log: bool = False  # Off by default. Enable with --wandb (needs a W&B login).
 
     # Output parameters
     experiment_name: str = "experiment"
@@ -231,9 +234,13 @@ def add_config_arguments(parser: argparse.ArgumentParser):
     ckpt_group.add_argument('--hf-branch', type=str,
                             help='HF Hub branch to push to (defaults to trainer_version)')
     ckpt_group.add_argument('--hf-upload', dest='hf_upload', action='store_true',
-                            default=None, help='Upload checkpoints/model card to HF Hub')
+                            default=None, help='Upload checkpoints/model card to HF Hub (off by default)')
     ckpt_group.add_argument('--no-hf-upload', dest='hf_upload', action='store_false',
                             default=None, help='Disable all HF Hub uploads')
+    ckpt_group.add_argument('--wandb', dest='wandb_log', action='store_true',
+                            default=None, help='Log the run to Weights & Biases (off by default)')
+    ckpt_group.add_argument('--no-wandb', dest='wandb_log', action='store_false',
+                            default=None, help='Disable Weights & Biases logging')
     
     # Data split parameters
     data_group = parser.add_argument_group('Data Split Parameters')
