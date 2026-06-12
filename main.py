@@ -264,7 +264,8 @@ def run_sampling(args):
         print("Loading dataset...")
         _, merged_df, _ = load_and_validate_data()
 
-        data_array_t, phylogroups_array = merged_df.iloc[:, :-1].values, merged_df.iloc[:, -1].values
+        # .to_numpy() (not .values) so pyarrow-backed columns convert cleanly before train_test_split.
+        data_array_t, phylogroups_array = merged_df.iloc[:, :-1].to_numpy(), merged_df.iloc[:, -1].to_numpy()
         all_genes = merged_df.columns[:-1]
         
         # Create data loaders
