@@ -13,26 +13,21 @@ edit, and run them.
 | Path | What it is |
 |------|------------|
 | `*.py` with `@app.cell` | marimo notebook **source** (`systems_analysis.py`, `statistical_analysis.py`) — the canonical, runnable form. |
-| `__marimo__/*.ipynb` | executed **Jupyter clones** of those notebooks, tracked so they render on GitHub without running anything. Regenerate after editing (see below). |
 | `figures.py` | a headless script that writes the per-variant training-loss figures. |
 | `figures/` | scratch figure/table outputs (gitignored, regenerable). |
 | `training_summary/` | curated paper figures + `run_stats.csv` (tracked). |
 
-`__marimo__/` also holds marimo's `*.html` render and `session/` cache, which are
-**not** tracked.
-
 ## marimo notebooks
 
-| Source | Clone | What it does |
-|--------|-------|--------------|
-| `systems_analysis.py` | [`__marimo__/systems_analysis.ipynb`](__marimo__/systems_analysis.ipynb) | Two-tier evaluation of designed genomes plus the integrated size–viability frontier. Compares `real`, `random`, `v3`, `v4_opt`. |
-| `statistical_analysis.py` | [`__marimo__/statistical_analysis.ipynb`](__marimo__/statistical_analysis.ipynb) | Hypergeometric enrichment of core-genome and essential genes across every cohort. |
+| Source | What it does |
+|--------|--------------|
+| `systems_analysis.py` | Two-tier evaluation of designed genomes plus the integrated size–viability frontier. Compares `real`, `random`, `v3`. |
+| `statistical_analysis.py` | Hypergeometric enrichment of core-genome and essential genes across every cohort. |
 
-Edit interactively, then **recompile the clone** after changes:
+Run or edit interactively:
 
 ```bash
 uv run marimo edit notebooks/systems_analysis.py
-uv run marimo export ipynb notebooks/systems_analysis.py -o notebooks/__marimo__/systems_analysis.ipynb
 ```
 
 ## The two-tier evaluation
@@ -79,6 +74,6 @@ hf buckets sync hf://buckets/McClain/minimal_genomes/ ./evaluation/data
 Or regenerate them from the trained checkpoints:
 
 ```bash
-uv run python -m genome_minimizer_2.sampling vae    --variant v4_opt --num-samples 100 --output evaluation/data/v4_opt
+uv run python -m genome_minimizer_2.sampling vae    --variant v3 --num-samples 100 --output evaluation/data/v3
 uv run python -m genome_minimizer_2.sampling random --num-samples 100 --output evaluation/data/random
 ```

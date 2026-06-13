@@ -306,43 +306,7 @@ def v3(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader,
     return trainer.train(train_loader, val_loader, folder)
 
 
-def create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
-                      essential_gene_indices, min_beta=0.1, max_beta=1.0,
-                      gamma_start=2.0, gamma_end=0.1, weight=1.0,
-                      essential_weight=1.0):
-    """Create trainer for v4: v3 + essential gene preservation loss.
-
-    Same as v3 but adds an EssentialGeneLoss that penalizes the model when
-    reconstructed probabilities for known essential genes are below 1.
-    """
-    config = TrainingConfig(n_epochs=n_epochs, max_norm=max_norm, lambda_l1=lambda_l1,
-                            patience=200, print_every=100)
-    trainer = VAETrainer(model, optimizer, scheduler, config)
-
-    loss_components = [
-        ReconstructionLoss(),
-        KLDivergenceLoss(scheduler_type="cosine", min_beta=min_beta, max_beta=max_beta, T=50),
-        GeneAbundanceLoss(gamma_start=gamma_start, gamma_end=gamma_end, weight=weight),
-        EssentialGeneLoss(essential_indices=essential_gene_indices,
-                          weight=essential_weight, ramp_epochs=200),
-        L1RegularizationLoss(lambda_l1=lambda_l1),
-    ]
-
-    trainer.setup_loss_components(loss_components)
-    return trainer
-
-
-def v4(model, folder, optimizer, scheduler, n_epochs, train_loader, val_loader,
-       min_beta, max_beta, gamma_start, gamma_end, weight, max_norm, lambda_l1,
-       essential_gene_indices, essential_weight=1.0):
-    """v4 function: v3 + essential gene preservation loss"""
-    trainer = create_v4_trainer(model, optimizer, scheduler, n_epochs, max_norm, lambda_l1,
-                                essential_gene_indices, min_beta, max_beta,
-                                gamma_start, gamma_end, weight, essential_weight)
-    return trainer.train(train_loader, val_loader, folder)
-
-
-# BUILDER PATTERN 
+# BUILDER PATTERN
 class VAETrainerBuilder:
     """Builder class that uses loss_components.py"""
     
@@ -437,6 +401,5 @@ class VAETrainerBuilder:
 __all__ = [
     'VAETrainer', 'VAETrainerBuilder', 'TrainingConfig',
     'create_v0_trainer', 'create_v1_trainer', 'create_v2_trainer', 'create_v3_trainer',
-    'create_v4_trainer',
-    'v0', 'v1', 'v2', 'v3', 'v4'
+    'v0', 'v1', 'v2', 'v3'
 ]

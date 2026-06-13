@@ -96,7 +96,7 @@ def _(EVAL_DATA, mo, np, pangenome_df):
             _path = EVAL_DATA / _variant / f"{_variant}_gene_lists_with_essentials.npy"
         return [list(x) for x in np.load(_path, allow_pickle=True)]
 
-    variants = ["real", "v0", "v1", "v2", "v3", "v4", "v4_opt", "random"]
+    variants = ["real", "v0", "v1", "v2", "v3", "random"]
     gene_lists = {_v: load_gene_lists(_v) for _v in variants if _v != "real"}
     gene_lists["real"] = real_gene_lists
 

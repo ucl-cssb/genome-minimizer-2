@@ -32,11 +32,10 @@ class ExperimentConfig:
     max_beta: float = 1.0
     gamma_start: float = 1.0
     gamma_end: float = 0.1
-    weight: float = 1.0  # For v3/v4
-    essential_weight: float = 1.0  # For v4
+    weight: float = 1.0  # For v3
 
     # Trainer version
-    trainer_version: str = "v2"  # v0, v1, v2, v3, v4
+    trainer_version: str = "v2"  # v0, v1, v2, v3
 
     # Scheduler parameters
     scheduler_step_size: int = 20
@@ -51,7 +50,7 @@ class ExperimentConfig:
     checkpoint_every: int = 500  # Save checkpoint every N epochs (0 to disable)
     hf_repo_id: str = "UCL-CSSB/genome-minimizer-2"
     hf_upload: bool = False  # Off by default. Enable with --hf-upload (needs HF write access).
-    hf_branch: str = ""  # Empty -> falls back to trainer_version. Use e.g. "v4_opt" for tuned variants.
+    hf_branch: str = ""  # Empty -> falls back to trainer_version. Set to push a tuned variant to a non-default branch.
 
     # Experiment tracking
     wandb_log: bool = False  # Off by default. Enable with --wandb (needs a W&B login).
@@ -80,7 +79,7 @@ class ExperimentConfig:
             if field_type == bool:
                 prompt = f"{field_info.name} [{current_value}] (true/false): "
             elif field_type == str and field_info.name == "trainer_version":
-                prompt = f"{field_info.name} [{current_value}] (v0/v1/v2/v3/v4): "
+                prompt = f"{field_info.name} [{current_value}] (v0/v1/v2/v3): "
             else:
                 prompt = f"{field_info.name} [{current_value}]: "
             
@@ -214,12 +213,10 @@ def add_config_arguments(parser: argparse.ArgumentParser):
     loss_group.add_argument('--gamma-start', type=float, help='Starting gamma value')
     loss_group.add_argument('--gamma-end', type=float, help='Ending gamma value')
     loss_group.add_argument('--weight', type=float, help='Weight parameter for v3')
-    loss_group.add_argument('--essential-weight', type=float,
-                            help='Weight on essential-gene loss (v4 only)')
-    
+
     # Trainer version
     trainer_group = parser.add_argument_group('Trainer Parameters')
-    trainer_group.add_argument('--trainer-version', choices=['v0', 'v1', 'v2', 'v3', 'v4'],
+    trainer_group.add_argument('--trainer-version', choices=['v0', 'v1', 'v2', 'v3'],
                               help='Trainer version')
     
     # Scheduler parameters

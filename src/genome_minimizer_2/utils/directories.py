@@ -17,7 +17,7 @@ WILD_TYPE_SEQUENCE = "data/GCF_000005845.2.gbff"  # E. coli MG1655 RefSeq (GCF_0
 SAMPLES_BINARY = "data/data_full_validated.npy"
 
 # Generated data paths
-ESSENTIAL_GENES_POSITIONS = os.path.join(PROJECT_ROOT, "src", "genome_minimizer_2", "data", "essential_genes", "essential_gene_positions.pkl")
+ESSENTIAL_GENES_POSITIONS = os.path.join(PROJECT_ROOT, "data", "essential_genes", "essential_gene_positions.pkl")
 MINIMIZED_GENOME = os.path.join(PROJECT_ROOT, "data", "minimized_genome.fasta")
 
 # Full paths (for backward compatibility)

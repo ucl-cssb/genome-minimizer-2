@@ -450,7 +450,8 @@ def process_multiple_genomes_single_file(genome_path: str, genes_path: str, mode
     """
     if not output_file:
         output_file = os.path.join(PROJECT_ROOT, "minimized_genomes", f"minimized_genomes_{model_name}.fasta")
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    # dirname is "" when output_file is a bare filename (e.g. results.fasta); makedirs("") raises.
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
 
     record = SeqIO.read(genome_path, "genbank")
     all_lists = np.load(genes_path, allow_pickle=True).tolist()

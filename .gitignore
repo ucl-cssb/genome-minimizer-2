@@ -9,6 +9,11 @@ evaluation/work/
 evaluation/results/
 evaluation/data/
 
+# Pipeline outputs that land in the repo root (README Quick Start)
+seq_out.npy
+seq_out_with_essentials.npy
+*.fasta
+
 # W&B
 wandb/
 
@@ -221,12 +226,11 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# Marimo: keep the __marimo__/*.ipynb clones (rendered notebooks) under version
-# control; ignore the HTML render and the local session cache.
+# Marimo: the .py notebooks are canonical; the generated __marimo__/ exports
+# (ipynb clones, HTML render, session cache) are not tracked.
 marimo/_static/
 marimo/_lsp/
-**/__marimo__/*.html
-**/__marimo__/session/
+**/__marimo__/
 
 # Streamlit
 .streamlit/secrets.toml

@@ -26,7 +26,6 @@ from ..utils.extras import extract_prefix
 from ..utils.directories import (
     PAPER_ESSENTIAL_GENES_FULL,
     ESSENTIAL_GENES_POSITIONS,
-    PROJECT_ROOT
 )
 
 # Configure logging
@@ -58,7 +57,10 @@ class EssentialGeneProcessor:
         self.all_genes = None
         self.gene_position_mapping = {}
 
-        self.figure_dir = Path(PROJECT_ROOT) / "data" / "essential_genes" 
+        # Write to the canonical location run_preprocessing checks for
+        # (directories.ESSENTIAL_GENES_POSITIONS), so the existence check and
+        # the "saved to" message point at the file that was actually written.
+        self.figure_dir = Path(ESSENTIAL_GENES_POSITIONS).parent
         self.figure_dir.mkdir(parents=True, exist_ok=True)
         
     def load_datasets(self) -> None:

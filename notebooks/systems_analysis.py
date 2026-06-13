@@ -38,9 +38,8 @@ def _(mo):
     - **real** — 100 strains sampled from the pangenome matrix
     - **random** — frequency-weighted core+accessory baseline
     - **[v3](https://huggingface.co/UCL-CSSB/genome-minimizer-2/tree/v3)** — HF UCL-CSSB `v3/final.pt` (epoch 2363, no essential-gene loss; latent_dim=32, hidden_dim=512), 100 samples, seed 42
-    - **[v4_opt](https://huggingface.co/McClain/genome-minimizer-2/tree/v4_opt)** — HF McClain `v4_opt/final.pt` (epoch 500, = v3 + essential-gene preservation loss, hyperparameter-tuned: lr 7.5e-4, essential_weight 0.5), 100 samples, seed 42
 
-    Both v3 and v4_opt are sampled with essential gene repair, meaning the lit essential genes are added back in at inference time as a post-processing step. "Random" means we took the core genome then appended accessory genes to it at random until we hit the expected number of total genes.
+    v3 is sampled with essential gene repair, meaning the lit essential genes are added back in at inference time as a post-processing step. "Random" means we took the core genome then appended accessory genes to it at random until we hit the expected number of total genes.
 
     The `real` cohort is a reference distribution sampled from the same
     pangenome used for training, not an independent holdout. That is fine for
@@ -250,7 +249,6 @@ def _(mo):
 
     Provenance check:
     - `v3` reproduces UCL-CSSB `genome-minimizer-2` branch `v3`, `final.pt` (epoch 2363), sampled with seed 42.
-    - `v4_opt` reproduces McClain `genome-minimizer-2` branch `v4_opt`, `final.pt` (epoch 500), sampled with seed 42.
     """)
     return
 
@@ -291,12 +289,6 @@ def _(DATA_DIR, EVAL_DATA, np, pd):
                 _load(EVAL_DATA / "v3" / "v3_gene_lists_with_essentials.npy")
             )
         ],
-        "v4_opt": [
-            (f"v4_opt_{i:03d}", list(g))
-            for i, g in enumerate(
-                _load(EVAL_DATA / "v4_opt" / "v4_opt_gene_lists_with_essentials.npy")
-            )
-        ],
     }
     for _src, _items in sample_sources.items():
         _sizes = [len(genes) for _, genes in _items]
@@ -332,9 +324,8 @@ def _(alt, np, pl, sample_sources):
         "real": "#2ca02c",
         "random": "#d62728",
         "v3": "#1f77b4",
-        "v4_opt": "#9467bd",
     }
-    _SRC_ORDER = ["real", "random", "v3", "v4_opt"]
+    _SRC_ORDER = ["real", "random", "v3"]
 
     _all_n = sizes_df["n_genes"].to_numpy()
     _bin_edges = np.linspace(_all_n.min() - 1, _all_n.max() + 1, 41)
@@ -470,12 +461,11 @@ def _(alt, long_df, pl, threshold):
 
     _real_min = per_genome.filter(pl.col("source") == "real")["n_modules"].min()
 
-    _SOURCE_ORDER = ["real", "random", "v3", "v4_opt"]
+    _SOURCE_ORDER = ["real", "random", "v3"]
     _SOURCE_COLORS = {
         "real": "#2ca02c",
         "random": "#d62728",
         "v3": "#1f77b4",
-        "v4_opt": "#9467bd",
     }
 
     _violin = (
@@ -725,12 +715,11 @@ def _(mo):
 
 @app.cell
 def _(alt, fba_df, wt_growth):
-    _SRC_ORDER = ["real", "random", "v3", "v4_opt"]
+    _SRC_ORDER = ["real", "random", "v3"]
     _SRC_COLORS = {
         "real": "#2ca02c",
         "random": "#d62728",
         "v3": "#1f77b4",
-        "v4_opt": "#9467bd",
     }
 
     violin_fba = (
@@ -820,7 +809,7 @@ def _(fba_df, long_df, pl):
 
 @app.cell
 def _(alt, joined):
-    _SRC_ORDER = ["real", "random", "v3", "v4_opt"]
+    _SRC_ORDER = ["real", "random", "v3"]
     (
         alt.Chart(joined.to_pandas())
         .mark_rect()

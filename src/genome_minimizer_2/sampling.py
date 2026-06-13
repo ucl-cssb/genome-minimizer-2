@@ -36,19 +36,15 @@ VARIANT_DIMS = {
     "v1": {"hidden_dim": 512, "latent_dim": 32},
     "v2": {"hidden_dim": 512, "latent_dim": 32},
     "v3": {"hidden_dim": 512, "latent_dim": 32},
-    "v4": {"hidden_dim": 512, "latent_dim": 32},
-    "v4_opt": {"hidden_dim": 512, "latent_dim": 32},
 }
 
 # Authoritative checkpoint location per variant: (repo_id, branch).
-# v0-v4 live on the UCL-CSSB org repo; the hyperparameter-tuned v4_opt is on McClain.
+# All presets live on the UCL-CSSB org repo, one branch per preset.
 VARIANT_REPO = {
     "v0": ("UCL-CSSB/genome-minimizer-2", "v0"),
     "v1": ("UCL-CSSB/genome-minimizer-2", "v1"),
     "v2": ("UCL-CSSB/genome-minimizer-2", "v2"),
     "v3": ("UCL-CSSB/genome-minimizer-2", "v3"),
-    "v4": ("UCL-CSSB/genome-minimizer-2", "v4"),
-    "v4_opt": ("McClain/genome-minimizer-2", "v4_opt"),
 }
 
 

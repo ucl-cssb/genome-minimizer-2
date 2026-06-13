@@ -18,9 +18,8 @@ from huggingface_hub import HfApi
 # Import modules
 from src.genome_minimizer_2.utils.custom_config import ExperimentConfig
 from src.genome_minimizer_2.training.training.trainer import (
-    v0, v1, v2, v3, v4,
+    v0, v1, v2, v3,
     create_v0_trainer, create_v1_trainer, create_v2_trainer, create_v3_trainer,
-    create_v4_trainer,
 )
 from src.genome_minimizer_2.training.evaluation.metrics import (
     calculate_reconstruction_metrics, 
@@ -35,7 +34,6 @@ from src.genome_minimizer_2.training.evaluation.visualise import (
 from src.genome_minimizer_2.utils.extras import plot_loss_vs_epochs_graph
 from src.genome_minimizer_2.utils.directories import (
     PROJECT_ROOT,
-    ESSENTIAL_GENES_POSITIONS,
 )
 
 # Import data loading function from data exploration
@@ -123,31 +121,6 @@ def get_v3_config() -> ExperimentConfig:
     )
 
 
-def get_v4_config() -> ExperimentConfig:
-    """
-    v4 model:
-    Same as v3 (512 hidden, 32 latent, cosine annealing + weighted gene abundance + L1)
-    plus an essential gene preservation loss that pushes all known essential
-    gene outputs toward 1.  LR schedule relaxed so learning doesn't stall
-    early (step_size=2000, gamma=0.5 → 5 halvings over 10k epochs).
-    """
-    return ExperimentConfig(
-        hidden_dim=512,
-        latent_dim=32,
-        n_epochs=10000,
-        min_beta=0.1,
-        max_beta=1.0,
-        gamma_start=2.0,
-        gamma_end=0.1,
-        weight=1.0,
-        lambda_l1=0.01,
-        trainer_version="v4",
-        experiment_name="v4_model",
-        scheduler_step_size=2000,
-        scheduler_gamma=0.5,
-    )
-
-
 class IntegratedExperimentRunner:
     """Experiment runner"""
     
@@ -172,7 +145,7 @@ class IntegratedExperimentRunner:
 
         self.logger.info(f"Created directories: {self.figure_dir}, {self.model_dir}")
 
-        # HF Hub — one branch per preset, or override via config.hf_branch (e.g. v4_opt for tuned variants).
+        # HF Hub — one branch per preset, or override via config.hf_branch for tuned variants.
         self.hf_branch = config.hf_branch or config.trainer_version
         if config.hf_upload:
             self.hf_api = HfApi()
@@ -363,33 +336,8 @@ class IntegratedExperimentRunner:
 
         return checkpoint_fn
 
-    def _load_essential_gene_indices(self) -> list[int]:
-        """Load flattened essential gene column indices from the preprocessed pickle."""
-        import pickle
-        # Check both possible paths (directories.py constant and actual preprocess output)
-        candidates = [
-            ESSENTIAL_GENES_POSITIONS,
-            os.path.join(PROJECT_ROOT, "data", "essential_genes", "essential_gene_positions.pkl"),
-        ]
-        pkl_path = None
-        for p in candidates:
-            if os.path.exists(p):
-                pkl_path = p
-                break
-        if pkl_path is None:
-            raise FileNotFoundError(
-                f"Essential gene positions not found. Checked: {candidates}. "
-                "Run --mode preprocess first."
-            )
-        with open(pkl_path, "rb") as f:
-            positions_dict = pickle.load(f)
-        # Flatten {gene_name: [idx, ...]} → sorted unique list of ints
-        indices = sorted({idx for idxs in positions_dict.values() for idx in idxs})
-        self.logger.info(f"Loaded {len(indices)} essential gene indices from {pkl_path}")
-        return indices
-
     def train_model(self):
-        """Train using v0-v4 trainer configs with HF Hub checkpointing."""
+        """Train using v0-v3 trainer configs with HF Hub checkpointing."""
         self.logger.info(f"Starting training with {self.config.trainer_version} configuration...")
         self.logger.info(f"Training for {self.config.n_epochs} epochs")
 
@@ -420,15 +368,6 @@ class IntegratedExperimentRunner:
                     self.model, self.optimizer, self.scheduler,
                     cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
                     cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end, cfg.weight,
-                )
-            elif cfg.trainer_version == "v4":
-                essential_indices = self._load_essential_gene_indices()
-                trainer = create_v4_trainer(
-                    self.model, self.optimizer, self.scheduler,
-                    cfg.n_epochs, cfg.max_norm, cfg.lambda_l1,
-                    essential_indices,
-                    cfg.min_beta, cfg.max_beta, cfg.gamma_start, cfg.gamma_end, cfg.weight,
-                    cfg.essential_weight,
                 )
             else:
                 raise ValueError(f"Unknown trainer version: {cfg.trainer_version}")
@@ -560,8 +499,8 @@ class IntegratedExperimentRunner:
     def _upload_model_card(self):
         """Generate and upload a model card (README.md) to this run's HF branch.
 
-        v0–v4 are distinguished by *loss function*. Branches whose name does NOT match
-        the trainer_version (e.g. ``v4_opt``) are hyperparameter-tuned variants of the
+        v0–v3 are distinguished by *loss function*. Branches whose name does NOT match
+        the trainer_version are hyperparameter-tuned variants of the
         loss-equivalent baseline branch. The card spells out which deltas matter.
         """
         if not self.config.hf_upload:
@@ -578,16 +517,14 @@ class IntegratedExperimentRunner:
             "v1": "Reconstruction + KL divergence (linear) + Gene abundance + L1 regularization",
             "v2": "Reconstruction + KL divergence (cosine) + Gene abundance + L1 regularization",
             "v3": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + L1 regularization",
-            "v4": "Reconstruction + KL divergence (cosine) + Weighted gene abundance + Essential gene preservation + L1 regularization",
         }
 
         # Default hyperparameters per loss-equivalent baseline (used to surface deltas).
         baseline_hparams = {
-            "v0": {"hidden_dim": 1024, "latent_dim": 64,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.0,  "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
-            "v1": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
-            "v2": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
-            "v3": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 2.0, "essential_weight": 0.0, "scheduler_step_size": 20,   "scheduler_gamma": 0.5, "random_state": 12345},
-            "v4": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 2.0, "essential_weight": 1.0, "scheduler_step_size": 2000, "scheduler_gamma": 0.5, "random_state": 12345},
+            "v0": {"hidden_dim": 1024, "latent_dim": 64,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.0,  "gamma_start": 1.0, "scheduler_step_size": 20, "scheduler_gamma": 0.5, "random_state": 12345},
+            "v1": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "scheduler_step_size": 20, "scheduler_gamma": 0.5, "random_state": 12345},
+            "v2": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 1.0, "scheduler_step_size": 20, "scheduler_gamma": 0.5, "random_state": 12345},
+            "v3": {"hidden_dim": 512,  "latent_dim": 32,  "learning_rate": 1e-3, "batch_size": 32, "lambda_l1": 0.01, "gamma_start": 2.0, "scheduler_step_size": 20, "scheduler_gamma": 0.5, "random_state": 12345},
         }
 
         arch = "1024 → 64" if cfg.hidden_dim == 1024 else f"{cfg.hidden_dim} → {cfg.latent_dim}"
@@ -627,7 +564,7 @@ function is identical to `{v}`. Only the hyperparameters below differ:
 |---|---|---|
 {rows}
 
-For loss-function deltas between numbered versions (v0 → v1 → … → v4), see the
+For loss-function deltas between numbered versions (v0 → v1 → … → v3), see the
 respective baseline branches.
 """
 
@@ -675,8 +612,7 @@ tags:
 | Beta range | {cfg.min_beta} → {cfg.max_beta} |
 | Gamma range | {cfg.gamma_start} → {cfg.gamma_end} |
 | L1 lambda | {cfg.lambda_l1} |
-| Gene-abundance weight (v3+) | {cfg.weight} |
-| Essential-gene weight (v4+) | {cfg.essential_weight} |
+| Gene-abundance weight (v3) | {cfg.weight} |
 | Scheduler step / gamma | {cfg.scheduler_step_size} / {cfg.scheduler_gamma} |
 | Random state | {cfg.random_state} |
 | Checkpoint every | {cfg.checkpoint_every} epochs |

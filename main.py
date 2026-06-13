@@ -71,7 +71,7 @@ def parse_arguments():
     
     # Training/experiment arguments
     parser.add_argument('--preset',
-                        choices=['v0', 'v1', 'v2', 'v3', 'v4'],
+                        choices=['v0', 'v1', 'v2', 'v3'],
                         default='v3',
                         help='Which model preset to run (for training mode)')
     
@@ -305,8 +305,6 @@ def run_sampling(args):
                 model_name = 'v2'
             elif 'v3' in model_filename:
                 model_name = 'v3'
-            elif 'v4' in model_filename:
-                model_name = 'v4'
             else:
                 print("✗ Could not detect version")
                 return False
@@ -316,7 +314,7 @@ def run_sampling(args):
                 config = checkpoint['config']
             else:
                 from src.genome_minimizer_2.utils.experiments import (
-                    get_v0_config, get_v1_config, get_v2_config, get_v3_config, get_v4_config
+                    get_v0_config, get_v1_config, get_v2_config, get_v3_config
                 )
                 if model_name == 'v0':
                     config = get_v0_config()
@@ -326,8 +324,6 @@ def run_sampling(args):
                     config = get_v2_config()
                 elif model_name == 'v3':
                     config = get_v3_config()
-                elif model_name == 'v4':
-                    config = get_v4_config()
         
         try:
             # print(f"PROJECT_ROOT: {PROJECT_ROOT}")
@@ -466,7 +462,7 @@ def run_single_experiment(args):
     try:
         from src.genome_minimizer_2.utils.experiments import (
             IntegratedExperimentRunner,
-            get_v0_config, get_v1_config, get_v2_config, get_v3_config, get_v4_config
+            get_v0_config, get_v1_config, get_v2_config, get_v3_config
         )
 
         # Get configuration based on preset
@@ -478,15 +474,13 @@ def run_single_experiment(args):
             config = get_v2_config()
         elif args.preset == 'v3':
             config = get_v3_config()
-        elif args.preset == 'v4':
-            config = get_v4_config()
         
         # Override epochs if specified
         if args.epochs:
             config.n_epochs = args.epochs
 
         # Apply any config flags the user explicitly passed (e.g. --no-hf-upload,
-        # --essential-weight). Only fields present on args with a non-None value
+        # --weight). Only fields present on args with a non-None value
         # are applied, so the preset's defaults win otherwise.
         from dataclasses import fields as _dataclass_fields
         _overrides = {

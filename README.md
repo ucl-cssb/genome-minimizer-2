@@ -51,7 +51,7 @@ To regenerate samples for any preset from the trained checkpoints on HuggingFace
 (this is the reproducible path used in the paper):
 
 ```bash
-uv run python -m genome_minimizer_2.sampling vae    --variant v4_opt --num-samples 100
+uv run python -m genome_minimizer_2.sampling vae    --variant v3 --num-samples 100
 uv run python -m genome_minimizer_2.sampling random --num-samples 100
 ```
 
@@ -109,10 +109,8 @@ everything else (architecture, loss schedule) is fixed per preset — use
 | `v1` | 512 → 32 | + gene abundance + L1 |
 | `v2` | 512 → 32 | + cosine KL annealing |
 | `v3` | 512 → 32 | + weighted abundance |
-| `v4` | 512 → 32 | + essential-gene preservation loss |
 
-The tuned `v4_opt` variant (lr 7.5e-4, essential-gene weight 0.5) shares the v4
-architecture; sweep configs are in `sweeps/`.
+W&B hyperparameter sweep configs are in `sweeps/`.
 
 W&B logging and HF Hub checkpoint upload are **off by default**. Enable with
 `--wandb` (needs a W&B login) and `--hf-upload` (needs write access to the repo).
@@ -133,8 +131,7 @@ uv run python main.py --mode minimizer --genes-path PATH --genome-path PATH [OPT
 
 Trained checkpoints are on HuggingFace:
 [UCL-CSSB/genome-minimizer-2](https://huggingface.co/UCL-CSSB/genome-minimizer-2),
-one branch per preset (`v0`–`v4`); the tuned `v4_opt` lives on
-[McClain/genome-minimizer-2](https://huggingface.co/McClain/genome-minimizer-2) (branch `v4_opt`).
+one branch per preset (`v0`–`v3`).
 Each `final.pt` is a full training-state checkpoint (model + optimizer + scheduler).
 The sampling module loads these directly — you don't download them by hand.
 
