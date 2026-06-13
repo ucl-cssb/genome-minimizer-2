@@ -13,9 +13,9 @@ The heavy deps (torch, huggingface_hub, the VAE model, binary_converter) are
 imported lazily inside the flows that need them, so importing those two helpers
 stays numpy/pandas-only.
 
-CLI (run with ``src`` on the path, e.g. ``cd src`` or ``PYTHONPATH=src``):
-    python -m genome_minimizer_2.sampling vae    --variant v3  --num-samples 100 --output evaluation/data/v3
-    python -m genome_minimizer_2.sampling random --num-samples 100 --output evaluation/data/random
+CLI (after ``uv sync``, run from the repo root):
+    uv run python -m genome_minimizer_2.sampling vae    --variant v3  --num-samples 100 --output evaluation/data/v3
+    uv run python -m genome_minimizer_2.sampling random --num-samples 100 --output evaluation/data/random
 """
 
 import argparse
