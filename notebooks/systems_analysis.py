@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.17.6"
+__generated_with = "0.23.9"
 app = marimo.App(width="medium", auto_download=["ipynb", "html"])
 
 
@@ -18,6 +18,7 @@ def _():
     import pandas as pd
     import polars as pl
     import requests
+
     return Path, alt, cobra, mo, np, pd, pl, re, requests, time
 
 
@@ -61,6 +62,41 @@ def _(Path):
     KEGG_CACHE.mkdir(parents=True, exist_ok=True)
     return DATA_DIR, EVAL_DATA, FBA_DIR, KEGG_CACHE
 
+@app.cell
+def _(mo, DATA_DIR, gene_order, np, pl):
+    _prev_path = DATA_DIR / "gene_prevalence.npy"
+    _gene_freq = np.load(_prev_path)
+
+    sl_core_threshold = 0.95
+    sl_core_mask = _gene_freq > sl_core_threshold
+
+    core_genome_summary_df = pl.DataFrame(
+        {
+            "definition": ["> 95% prevalence"],
+            "n_core_genes": [int(sl_core_mask.sum())],
+            "n_total_genes": [int(len(gene_order))],
+            "pct_pangenome": [round(float(100 * sl_core_mask.mean()), 2)],
+        }
+    )
+
+    print(
+        f"Core genome size using >95% prevalence: "
+        f"{int(sl_core_mask.sum())} genes"
+    )
+
+    mo.md(
+        f"""
+        ### Core genome size
+
+        Using the notebook's random-baseline definition of the core genome:
+
+        - **Core genes >95% prevalence:** `{core_genome_summary_df['n_core_genes'][0]}`
+        - **Total pangenome genes:** `{core_genome_summary_df['n_total_genes'][0]}`
+        """
+    )
+
+    core_genome_summary_df
+    return core_genome_summary_df, sl_core_mask
 
 @app.cell
 def _(mo):
@@ -900,8 +936,8 @@ def _(DATA_DIR, EVAL_DATA, np, pangenome_genes):
 
     def repair_essentials(gene_lists):
         return [add_essential_genes(g, _essential_set) for g in gene_lists]
-    return gene_order, make_random, repair_essentials, v3_continuous
 
+    return gene_order, make_random, repair_essentials, v3_continuous
 
 @app.cell
 def _(
@@ -925,6 +961,7 @@ def _(
     def n_modules_complete(gene_names, frac):
         _bn = {pangenome_to_bnum[g] for g in gene_names if g in pangenome_to_bnum}
         return sum(len(_bn & mg) / len(mg) >= frac for mg in module_genes.values() if mg)
+
     return fba_growth, n_modules_complete
 
 
@@ -1070,6 +1107,786 @@ def _(alt, reanalysis_df):
     ).resolve_scale(y="independent").properties(width=170, height=240)
     return
 
+# ---------------------------------------------------------------------
+# 12. Synthetic lethality screen
+# ---------------------------------------------------------------------
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # 12. BioGRID negative-genetic-interaction screen
+
+    For each sampled genome, count known
+    pairwise incompatibility interactions for which both genes are absent.
+
+    BioGRID did not contain rows explicitly labelled `Synthetic Lethality` in
+    the *E. coli* file used here. We therefore use BioGRID `Negative Genetic`
+    interactions as a pragmatic proxy for pairwise deletion risks.
+
+    Expected input:
+
+    `data/synthetic_lethality/ecoli_synthetic_lethal_pairs.tsv`
+
+    Required columns:
+
+    - `gene_a`
+    - `gene_b`
+
+    Optional columns such as `interaction_type`, `score`, `publication`, and
+    `source` are preserved only in the source file; the screen itself needs only
+    the gene-pair columns.
+    """)
+    return
+
+
+@app.cell
+def _(DATA_DIR, pd):
+    sl_dir = DATA_DIR / "synthetic_lethality"
+    sl_dir.mkdir(parents=True, exist_ok=True)
+
+    sl_pairs_path = sl_dir / "ecoli_synthetic_lethal_pairs.tsv"
+
+    if not sl_pairs_path.exists():
+        _template = pd.DataFrame(
+            columns=["gene_a", "gene_b", "interaction_type", "score", "source"]
+        )
+        _template.to_csv(sl_pairs_path, sep="\t", index=False)
+        raise FileNotFoundError(
+            f"Created a template file at: {sl_pairs_path}\n"
+            "Fill it with BioGRID E. coli Negative Genetic interaction pairs, "
+            "then re-run this cell.\n"
+            "Required columns: gene_a, gene_b"
+        )
+
+    sl_raw_pairs_df = pd.read_csv(sl_pairs_path, sep=None, engine="python")
+    sl_raw_pairs_df.columns = [
+        str(_c).strip().lower() for _c in sl_raw_pairs_df.columns
+    ]
+
+    _rename = {}
+    for _c in sl_raw_pairs_df.columns:
+        _c_clean = _c.replace("-", "_").replace(" ", "_")
+        if _c_clean in {
+            "gene1",
+            "gene_1",
+            "gene_a",
+            "interactor_a",
+            "interactora",
+            "query",
+            "query_gene",
+        }:
+            _rename[_c] = "gene_a"
+        elif _c_clean in {
+            "gene2",
+            "gene_2",
+            "gene_b",
+            "interactor_b",
+            "interactorb",
+            "array",
+            "array_gene",
+            "target",
+            "target_gene",
+        }:
+            _rename[_c] = "gene_b"
+
+    sl_raw_pairs_df = sl_raw_pairs_df.rename(columns=_rename)
+
+    if not {"gene_a", "gene_b"}.issubset(sl_raw_pairs_df.columns):
+        raise ValueError(
+            "Interaction file must contain columns called gene_a and gene_b, "
+            "or recognisable alternatives such as gene1/gene2."
+        )
+
+    sl_raw_pairs_df = (
+        sl_raw_pairs_df[["gene_a", "gene_b"]]
+        .dropna()
+        .astype(str)
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+    print(f"Raw BioGRID interaction pairs loaded: {len(sl_raw_pairs_df)}")
+    sl_raw_pairs_df.head()
+    return sl_dir, sl_pairs_path, sl_raw_pairs_df
+
+
+@app.cell
+def _(normalize_gene, pangenome_genes, pangenome_to_bnum, sl_raw_pairs_df, pd, re):
+    """
+    Map BioGRID interaction-pair identifiers onto the pangenome naming system.
+
+    Downstream, the screen uses normalized pangenome names:
+    - lowercase
+    - Panaroo suffixes such as _1, _2 stripped
+
+    b-numbers are resolved through the existing pangenome_to_bnum crosswalk.
+    """
+    sl_pangenome_norm_set = {normalize_gene(_g) for _g in pangenome_genes}
+
+    _bnum_to_pangenome_norms = {}
+    for _gene, _bnum in pangenome_to_bnum.items():
+        _bnum_to_pangenome_norms.setdefault(str(_bnum).lower(), set()).add(
+            normalize_gene(_gene)
+        )
+
+    def _sl_clean_identifier(x):
+        _x = str(x).strip()
+        _x = _x.replace("eco:", "")
+        _x = _x.replace("bnumber:", "")
+        _x = _x.split(";")[0].split(",")[0].strip()
+        return _x
+
+    def _sl_resolve_identifier(x):
+        """
+        Return a set of normalized pangenome identifiers corresponding to x.
+
+        Supports:
+        - gene symbols, e.g. accA
+        - Panaroo-like names, e.g. accA_1
+        - b-numbers, e.g. b0185
+        """
+        _x = _sl_clean_identifier(x)
+        _xl = _x.lower()
+
+        if re.fullmatch(r"b\d{4}", _xl):
+            return _bnum_to_pangenome_norms.get(_xl, {_xl})
+
+        return {normalize_gene(_x)}
+
+    _sl_mapped_pairs = []
+    _sl_unmapped_pairs = []
+
+    for _, _row in sl_raw_pairs_df.iterrows():
+        _a_set = _sl_resolve_identifier(_row["gene_a"])
+        _b_set = _sl_resolve_identifier(_row["gene_b"])
+
+        _found = False
+        for _a in _a_set:
+            for _b in _b_set:
+                if _a == _b:
+                    continue
+                if _a in sl_pangenome_norm_set and _b in sl_pangenome_norm_set:
+                    _sl_mapped_pairs.append(tuple(sorted((_a, _b))))
+                    _found = True
+
+        if not _found:
+            _sl_unmapped_pairs.append((_row["gene_a"], _row["gene_b"]))
+
+    sl_pairs_df = (
+        pd.DataFrame(_sl_mapped_pairs, columns=["gene_a", "gene_b"])
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+    sl_unmapped_pairs_df = pd.DataFrame(
+        _sl_unmapped_pairs, columns=["gene_a", "gene_b"]
+    )
+
+    print(f"Mapped/testable BioGRID interaction pairs: {len(sl_pairs_df)}")
+    print(f"Unmapped/excluded raw pairs: {len(sl_unmapped_pairs_df)}")
+
+    if len(sl_pairs_df) == 0:
+        raise ValueError(
+            "No BioGRID interaction pairs mapped to the pangenome identifiers. "
+            "Check whether the input file uses E. coli gene symbols or b-numbers."
+        )
+
+    sl_pairs_df.head()
+    return sl_pairs_df, sl_pangenome_norm_set, sl_unmapped_pairs_df
+
+
+# @app.cell
+# def _(
+#     best_size,
+#     best_threshold,
+#     gene_order,
+#     make_random,
+#     repair_essentials,
+#     sample_sources,
+#     v3_continuous,
+#     np,
+# ):
+#     """
+#     Define cohorts for the BioGRID interaction screen.
+
+#     Main analysis:
+#     - v3 genomes decoded at the selected operating point
+
+#     Controls:
+#     - real genomes
+#     - size-matched random genomes
+#     """
+#     sl_v3_best_gene_lists = repair_essentials(
+#         [
+#             gene_order[v3_continuous[_i] > best_threshold].tolist()
+#             for _i in range(v3_continuous.shape[0])
+#         ]
+#     )
+
+#     sl_random_best_gene_lists = repair_essentials(
+#         make_random(best_size, n=100, seed=42)
+#     )
+
+#     sl_cohort_gene_lists = {
+#         "real": [
+#             (_gid, _genes)
+#             for _gid, _genes in sample_sources["real"]
+#         ],
+#         "random_size_matched": [
+#             (f"random_{_i:03d}", _genes)
+#             for _i, _genes in enumerate(sl_random_best_gene_lists)
+#         ],
+#         f"v3_threshold_{best_threshold:.2f}": [
+#             (f"v3_{_i:03d}", _genes)
+#             for _i, _genes in enumerate(sl_v3_best_gene_lists)
+#         ],
+#     }
+
+#     for _sl_cohort_name, _sl_items in sl_cohort_gene_lists.items():
+#         _sl_sizes = [len(_genes) for _, _genes in _sl_items]
+#         print(
+#             f"{_sl_cohort_name}: n={len(_sl_items)}, "
+#             f"mean genes={np.mean(_sl_sizes):.1f}, "
+#             f"min={min(_sl_sizes)}, max={max(_sl_sizes)}"
+#         )
+
+#     return sl_cohort_gene_lists, sl_random_best_gene_lists, sl_v3_best_gene_lists
+
+@app.cell
+def _(sample_sources, np):
+    """
+    Define cohorts for the BioGRID interaction screen.
+
+    This version uses the ORIGINAL v3 sampled genomes loaded in section 3:
+        sample_sources["v3"]
+
+    It does NOT use:
+        - v3_continuous
+        - best_threshold
+        - best_size
+        - repair_essentials
+        - make_random
+
+    Therefore the screen is applied to the original v3 gene lists, not the
+    later threshold-swept operating point.
+    """
+
+    sl_cohort_gene_lists = {
+        "real": [
+            (_gid, _genes)
+            for _gid, _genes in sample_sources["real"]
+        ],
+        "random_original": [
+            (_gid, _genes)
+            for _gid, _genes in sample_sources["random"]
+        ],
+        "v3_original": [
+            (_gid, _genes)
+            for _gid, _genes in sample_sources["v3"]
+        ],
+    }
+
+    for _sl_cohort_name, _sl_items in sl_cohort_gene_lists.items():
+        _sl_sizes = [len(_genes) for _, _genes in _sl_items]
+        print(
+            f"{_sl_cohort_name}: n={len(_sl_items)}, "
+            f"mean genes={np.mean(_sl_sizes):.1f}, "
+            f"min={min(_sl_sizes)}, max={max(_sl_sizes)}"
+        )
+
+    return sl_cohort_gene_lists
+
+@app.cell
+def _(normalize_gene, pd, sl_cohort_gene_lists, sl_pairs_df, sl_pangenome_norm_set):
+    """
+    Count, for each genome, the number of BioGRID interaction pairs where
+    both genes are absent.
+    """
+
+    def sl_codeleted_interaction_hits(gene_list, interaction_pairs_df):
+        _sl_present = {normalize_gene(_g) for _g in gene_list}
+        _sl_absent = sl_pangenome_norm_set - _sl_present
+
+        _sl_hits = interaction_pairs_df[
+            interaction_pairs_df["gene_a"].isin(_sl_absent)
+            & interaction_pairs_df["gene_b"].isin(_sl_absent)
+        ].copy()
+
+        if len(_sl_hits):
+            _sl_hits["pair"] = _sl_hits["gene_a"] + "-" + _sl_hits["gene_b"]
+
+        return _sl_hits
+
+    _sl_screen_rows = []
+    _sl_hit_rows = []
+
+    for _sl_cohort_name, _sl_genomes in sl_cohort_gene_lists.items():
+        for _sl_genome_id, _sl_genes in _sl_genomes:
+            _sl_hits = sl_codeleted_interaction_hits(_sl_genes, sl_pairs_df)
+
+            _sl_screen_rows.append(
+                {
+                    "cohort": _sl_cohort_name,
+                    "genome_id": _sl_genome_id,
+                    "n_genes": len(_sl_genes),
+                    "n_testable_interaction_pairs": len(sl_pairs_df),
+                    "n_codeleted_interaction_pairs": len(_sl_hits),
+                }
+            )
+
+            for _, _sl_hit in _sl_hits.iterrows():
+                _sl_hit_rows.append(
+                    {
+                        "cohort": _sl_cohort_name,
+                        "genome_id": _sl_genome_id,
+                        "gene_a": _sl_hit["gene_a"],
+                        "gene_b": _sl_hit["gene_b"],
+                        "pair": _sl_hit["gene_a"] + "-" + _sl_hit["gene_b"],
+                    }
+                )
+
+    sl_screen_df = pd.DataFrame(_sl_screen_rows)
+    sl_hit_df = pd.DataFrame(_sl_hit_rows)
+
+    print(f"Screened genomes: {len(sl_screen_df)}")
+    print(f"Total co-deleted BioGRID interaction hits: {len(sl_hit_df)}")
+
+    sl_screen_df.head()
+    return sl_codeleted_interaction_hits, sl_hit_df, sl_screen_df
+
+
+@app.cell
+def _(pl, sl_screen_df):
+    """
+    Cohort-level summary table.
+    """
+    sl_summary_df = (
+        pl.from_pandas(sl_screen_df)
+        .group_by("cohort")
+        .agg(
+            [
+                pl.len().alias("n"),
+                pl.col("n_genes").mean().round(1).alias("mean_genes"),
+                pl.col("n_codeleted_interaction_pairs")
+                .mean()
+                .round(2)
+                .alias("mean_codeleted_interactions"),
+                pl.col("n_codeleted_interaction_pairs")
+                .median()
+                .alias("median_codeleted_interactions"),
+                pl.col("n_codeleted_interaction_pairs")
+                .max()
+                .alias("max_codeleted_interactions"),
+                (pl.col("n_codeleted_interaction_pairs") > 0)
+                .sum()
+                .alias("n_with_any_codeleted_interaction"),
+            ]
+        )
+        .with_columns(
+            (
+                pl.col("n_with_any_codeleted_interaction")
+                / pl.col("n")
+                * 100
+            )
+            .round(1)
+            .alias("pct_with_any_codeleted_interaction")
+        )
+        .sort("cohort")
+    )
+
+    sl_summary_df
+    return sl_summary_df
+
+
+@app.cell
+def _(alt, sl_screen_df):
+    """
+    Distribution of co-deleted BioGRID interaction pairs per genome.
+    """
+    sl_hist_chart = (
+        alt.Chart(sl_screen_df)
+        .mark_bar(opacity=0.7)
+        .encode(
+            x=alt.X(
+                "n_codeleted_interaction_pairs:Q",
+                bin=alt.Bin(maxbins=30),
+                title="# co-deleted BioGRID negative genetic interaction pairs",
+            ),
+            y=alt.Y("count():Q", title="# genomes"),
+            color=alt.Color("cohort:N"),
+            row=alt.Row("cohort:N"),
+            tooltip=["cohort", "count()"],
+        )
+        .properties(
+            width=520,
+            height=90,
+            title="BioGRID negative genetic interaction deletions per genome",
+        )
+        .resolve_scale(y="independent")
+    )
+
+    sl_hist_chart
+    return sl_hist_chart
+
+
+@app.cell
+def _(sl_dir, sl_hit_df, sl_screen_df, sl_summary_df):
+    """
+    Write analysis outputs.
+    """
+    sl_dir.mkdir(parents=True, exist_ok=True)
+
+    sl_per_genome_path = sl_dir / "biogrid_negative_genetic_screen_per_genome.tsv"
+    sl_hits_path = sl_dir / "biogrid_negative_genetic_codeleted_pairs.tsv"
+    sl_summary_path = sl_dir / "biogrid_negative_genetic_screen_summary.tsv"
+
+    sl_screen_df.to_csv(sl_per_genome_path, sep="\t", index=False)
+    sl_hit_df.to_csv(sl_hits_path, sep="\t", index=False)
+    sl_summary_df.write_csv(sl_summary_path, separator="\t")
+
+    print("Wrote:")
+    print(f"- {sl_per_genome_path}")
+    print(f"- {sl_hits_path}")
+    print(f"- {sl_summary_path}")
+
+    return sl_hits_path, sl_per_genome_path, sl_summary_path
+
+
+@app.cell
+def _(mo, sl_summary_df):
+    sl_manuscript_text = """
+    As an additional post hoc screen, we compared the sampled genomes against
+    curated BioGRID E. coli negative genetic interactions. BioGRID did not
+    contain interactions explicitly annotated as synthetic lethality in the
+    E. coli file analysed; therefore, negative genetic interactions were used
+    as a proxy for known pairwise incompatibilities that may constrain genome
+    reduction. For each genome, we counted interaction pairs for which both
+    genes were absent. This analysis provides a check for known pairwise
+    deletion risks, while recognising that available interaction data are
+    incomplete, condition-dependent, and do not capture higher-order deletion
+    effects.
+    """
+
+    mo.md(
+        f"""
+        ## Suggested manuscript sentence
+
+        {sl_manuscript_text}
+
+        Cohort-level summary:
+
+        {sl_summary_df}
+        """
+    )
+    return sl_manuscript_text
+
+# @app.cell
+# def _(
+#     gene_order,
+#     make_random,
+#     normalize_gene,
+#     np,
+#     pl,
+#     repair_essentials,
+#     sl_pairs_df,
+#     sl_pangenome_norm_set,
+#     v3_continuous,
+# ):
+#     """
+#     Sweep VAE decode threshold and count co-deleted BioGRID interaction pairs.
+
+#     This mirrors the FBA size-viability frontier:
+#     - For each v3 decode threshold, generate v3 genomes.
+#     - Compute their mean genome size.
+#     - Generate random genomes matched to that mean size.
+#     - Count known BioGRID negative-genetic-interaction pairs where both genes
+#       are absent.
+#     """
+
+#     def _sl_count_codeleted_interactions(_gene_names):
+#         _present = {normalize_gene(_g) for _g in _gene_names}
+#         _absent = sl_pangenome_norm_set - _present
+
+#         return int(
+#             (
+#                 sl_pairs_df["gene_a"].isin(_absent)
+#                 & sl_pairs_df["gene_b"].isin(_absent)
+#             ).sum()
+#         )
+
+#     _sl_grid = [0.30, 0.35, 0.40, 0.42, 0.44, 0.46, 0.48, 0.50]
+#     _sl_sweep_rows = []
+
+#     for _sl_threshold in _sl_grid:
+#         _sl_v3_gene_lists = repair_essentials(
+#             [
+#                 gene_order[v3_continuous[_i] > _sl_threshold].tolist()
+#                 for _i in range(v3_continuous.shape[0])
+#             ]
+#         )
+
+#         _sl_target_size = int(
+#             round(np.mean([len(_genes) for _genes in _sl_v3_gene_lists]))
+#         )
+
+#         _sl_random_gene_lists = repair_essentials(
+#             make_random(_sl_target_size, n=100, seed=42)
+#         )
+
+#         for _sl_source, _sl_gene_lists in (
+#             ("v3", _sl_v3_gene_lists),
+#             ("random", _sl_random_gene_lists),
+#         ):
+#             _sl_counts = np.array(
+#                 [
+#                     _sl_count_codeleted_interactions(_genes)
+#                     for _genes in _sl_gene_lists
+#                 ]
+#             )
+
+#             _sl_sweep_rows.append(
+#                 {
+#                     "threshold": _sl_threshold,
+#                     "source": _sl_source,
+#                     "genome_size": int(
+#                         round(np.mean([len(_genes) for _genes in _sl_gene_lists]))
+#                     ),
+#                     "mean_codeleted_interactions": round(float(np.mean(_sl_counts)), 2),
+#                     "median_codeleted_interactions": round(float(np.median(_sl_counts)), 2),
+#                     "max_codeleted_interactions": int(np.max(_sl_counts)),
+#                     "pct_with_any_codeleted_interaction": round(
+#                         float(100 * np.mean(_sl_counts > 0)), 1
+#                     ),
+#                 }
+#             )
+
+#     sl_sweep_df = pl.DataFrame(_sl_sweep_rows)
+#     sl_sweep_df
+#     return sl_sweep_df
+
+# @app.cell
+# def _(alt, sl_sweep_df):
+#     sl_sweep_chart = (
+#         alt.Chart(sl_sweep_df.to_pandas())
+#         .mark_line(point=True)
+#         .encode(
+#             x=alt.X(
+#                 "genome_size:Q",
+#                 title="genes per genome",
+#                 scale=alt.Scale(zero=False),
+#             ),
+#             y=alt.Y(
+#                 "mean_codeleted_interactions:Q",
+#                 title="mean co-deleted BioGRID interaction pairs",
+#             ),
+#             color=alt.Color(
+#                 "source:N",
+#                 scale=alt.Scale(
+#                     domain=["v3", "random"],
+#                     range=["#1f77b4", "#d62728"],
+#                 ),
+#             ),
+#             tooltip=[
+#                 "threshold",
+#                 "source",
+#                 "genome_size",
+#                 "mean_codeleted_interactions",
+#                 "median_codeleted_interactions",
+#                 "max_codeleted_interactions",
+#                 "pct_with_any_codeleted_interaction",
+#             ],
+#         )
+#         .properties(
+#             width=480,
+#             height=300,
+#             title="Size–interaction burden frontier: v3 vs size-matched random",
+#         )
+#     )
+
+#     sl_sweep_chart
+#     return sl_sweep_chart
+
+@app.cell
+def _(
+    gene_order,
+    make_random,
+    normalize_gene,
+    np,
+    pl,
+    repair_essentials,
+    sl_pairs_df,
+    sl_pangenome_norm_set,
+    v3_continuous,
+):
+    """
+    Sweep VAE decode threshold and count co-deleted BioGRID interaction pairs.
+
+    For each threshold:
+    - generate v3 genomes
+    - compute their mean genome size
+    - generate size-matched random genomes
+    - count co-deleted interaction pairs per genome
+    - summarise with median and IQR
+    """
+
+    def _sl_count_codeleted_interactions(_gene_names):
+        _present = {normalize_gene(_g) for _g in _gene_names}
+        _absent = sl_pangenome_norm_set - _present
+
+        return int(
+            (
+                sl_pairs_df["gene_a"].isin(_absent)
+                & sl_pairs_df["gene_b"].isin(_absent)
+            ).sum()
+        )
+
+    _sl_grid = [0.30, 0.35, 0.40, 0.42, 0.44, 0.46, 0.48, 0.50]
+    _sl_sweep_rows = []
+
+    for _sl_threshold in _sl_grid:
+        _sl_v3_gene_lists = repair_essentials(
+            [
+                gene_order[v3_continuous[_i] > _sl_threshold].tolist()
+                for _i in range(v3_continuous.shape[0])
+            ]
+        )
+
+        _sl_target_size = int(
+            round(np.mean([len(_genes) for _genes in _sl_v3_gene_lists]))
+        )
+
+        _sl_random_gene_lists = repair_essentials(
+            make_random(_sl_target_size, n=100, seed=42)
+        )
+
+        for _sl_source, _sl_gene_lists in (
+            ("v3", _sl_v3_gene_lists),
+            ("random", _sl_random_gene_lists),
+        ):
+            _sl_counts = np.array(
+                [
+                    _sl_count_codeleted_interactions(_genes)
+                    for _genes in _sl_gene_lists
+                ]
+            )
+
+            _sl_sweep_rows.append(
+                {
+                    "threshold": _sl_threshold,
+                    "source": _sl_source,
+                    "genome_size": int(
+                        round(np.mean([len(_genes) for _genes in _sl_gene_lists]))
+                    ),
+                    "median_codeleted_interactions": round(
+                        float(np.median(_sl_counts)), 2
+                    ),
+                    "q25_codeleted_interactions": round(
+                        float(np.quantile(_sl_counts, 0.25)), 2
+                    ),
+                    "q75_codeleted_interactions": round(
+                        float(np.quantile(_sl_counts, 0.75)), 2
+                    ),
+                    "max_codeleted_interactions": int(np.max(_sl_counts)),
+                    "pct_with_any_codeleted_interaction": round(
+                        float(100 * np.mean(_sl_counts > 0)), 1
+                    ),
+                }
+            )
+
+    sl_sweep_df = pl.DataFrame(_sl_sweep_rows)
+    sl_sweep_df
+    return sl_sweep_df
+
+@app.cell
+def _(alt, sl_sweep_df):
+    _sl_pdf = sl_sweep_df.to_pandas()
+
+    _sl_band = (
+        alt.Chart(_sl_pdf)
+        .mark_area(opacity=0.2)
+        .encode(
+            x=alt.X(
+                "genome_size:Q",
+                title="genes per genome",
+                scale=alt.Scale(zero=False),
+            ),
+            y=alt.Y(
+                "q25_codeleted_interactions:Q",
+                title="co-deleted BioGRID interaction pairs",
+            ),
+            y2="q75_codeleted_interactions:Q",
+            color=alt.Color(
+                "source:N",
+                scale=alt.Scale(
+                    domain=["v3", "random"],
+                    range=["#1f77b4", "#d62728"],
+                ),
+            ),
+            tooltip=[
+                "threshold",
+                "source",
+                "genome_size",
+                "q25_codeleted_interactions",
+                "median_codeleted_interactions",
+                "q75_codeleted_interactions",
+                "max_codeleted_interactions",
+                "pct_with_any_codeleted_interaction",
+            ],
+        )
+    )
+
+    _sl_line = (
+        alt.Chart(_sl_pdf)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X(
+                "genome_size:Q",
+                title="genes per genome",
+                scale=alt.Scale(zero=False),
+            ),
+            y=alt.Y(
+                "median_codeleted_interactions:Q",
+                title="co-deleted BioGRID interaction pairs",
+            ),
+            color=alt.Color(
+                "source:N",
+                scale=alt.Scale(
+                    domain=["v3", "random"],
+                    range=["#1f77b4", "#d62728"],
+                ),
+            ),
+            tooltip=[
+                "threshold",
+                "source",
+                "genome_size",
+                "q25_codeleted_interactions",
+                "median_codeleted_interactions",
+                "q75_codeleted_interactions",
+                "max_codeleted_interactions",
+                "pct_with_any_codeleted_interaction",
+            ],
+        )
+    )
+
+    sl_sweep_chart = (
+        alt.layer(_sl_band, _sl_line)
+        .properties(
+            width=480,
+            height=300,
+            title="Size–interaction burden frontier: v3 vs size-matched random",
+        )
+    )
+
+    sl_sweep_chart
+    return sl_sweep_chart
+
+@app.cell
+def _(sl_dir, sl_sweep_df):
+    sl_sweep_path = sl_dir / "biogrid_negative_genetic_size_sweep.tsv"
+    sl_sweep_df.write_csv(sl_sweep_path, separator="\t")
+
+    print(f"Wrote: {sl_sweep_path}")
+    return sl_sweep_path
 
 if __name__ == "__main__":
     app.run()
