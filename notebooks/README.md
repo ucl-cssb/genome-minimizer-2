@@ -59,19 +59,21 @@ These read local data that is **not** shipped in the repo (gitignored):
 
 - `data/F4_complete_presence_absence.csv` — pangenome presence/absence
 - `data/essential_genes.csv` — literature essential genes
-- `data/kegg/`, `data/fba/iML1515.xml`, `data/gene_prevalence.npy` — KEGG + FBA caches
-- `paper_figures/data/` — local W&B export (`paper_figures/extract_wandb.py`), for `figures.py`
 - `evaluation/data/<variant>/<variant>_gene_lists_with_essentials.npy` — per-cohort gene lists
+- `data/kegg/` — KEGG module cache; fetched automatically from the KEGG REST API on first run
+- `data/fba/iML1515.xml` — the iML1515 metabolic model; download once from [BiGG](http://bigg.ucsd.edu/models/iML1515)
+- `paper_figures/data/` — local W&B export (`paper_figures/extract_wandb.py`), for `figures.py`
 
-The cached generations (per-cohort gene lists and VAE samples) are published on
-the HF bucket **[McClain/minimal_genomes](https://huggingface.co/buckets/McClain/minimal_genomes)**
-(requires `huggingface_hub>=1.8.0`):
+(`data/gene_prevalence.npy` is written by `systems_analysis.py` on first run as a cache — not a prerequisite.)
+
+The training data and the per-cohort gene lists are downloaded by the top-level
+`setup-data` mode (see the [main README](../README.md#get-the-data)):
 
 ```bash
-hf buckets sync hf://buckets/McClain/minimal_genomes/ ./evaluation/data
+uv run python main.py --mode setup-data
 ```
 
-Or regenerate them from the trained checkpoints:
+Or regenerate the samples from the trained checkpoints on HuggingFace:
 
 ```bash
 uv run python -m genome_minimizer_2.sampling vae    --variant v3 --num-samples 100 --output evaluation/data/v3

@@ -238,10 +238,13 @@ def run_sampling(args):
         print(f"✗ Model file not found: {args.model_path}")
         return False
     
-    if not os.path.exists(args.genes_path):
-        print(f"✗ Model file not found: {args.genes_path}. Run preprocessing first.")
+    # Default to the preprocess output (essential gene positions) when not given,
+    # so `--mode sample` works right after `--mode preprocess` as the README shows.
+    genes_path = args.genes_path or ESSENTIAL_GENES_POSITIONS
+    if not os.path.exists(genes_path):
+        print(f"✗ Essential gene positions not found: {genes_path}. Run preprocessing first.")
         return False
-    
+
     try:
         # Import sampling utilities
         from src.genome_minimizer_2.utils.extras import (
@@ -277,9 +280,8 @@ def run_sampling(args):
             temp_data, temp_labels, test_size=0.3333, random_state=12345
         )
 
-        with open(args.genes_path, 'rb') as f:
+        with open(genes_path, 'rb') as f:
             essential_gene_positions = pickle.load(f)
-        # essential_gene_positions = np.load(args.genes_path, allow_pickle=True)
         
         test_loader = DataLoader(TensorDataset(test_data), batch_size=32, shuffle=False)
         
