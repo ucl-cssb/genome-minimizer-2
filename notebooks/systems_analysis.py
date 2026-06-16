@@ -40,7 +40,7 @@ def _(mo):
     - **random** — frequency-weighted core+accessory baseline
     - **[v3](https://huggingface.co/UCL-CSSB/genome-minimizer-2/tree/v3)** — HF UCL-CSSB `v3/final.pt` (epoch 2363, no essential-gene loss; latent_dim=32, hidden_dim=512), 100 samples, seed 42
 
-    v3 is sampled with essential gene repair, meaning the lit essential genes are added back in at inference time as a post-processing step. "Random" means we took the core genome then appended accessory genes to it at random until we hit the expected number of total genes.
+    v3 is sampled with essential gene repair, meaning the lit essential genes are added back in at inference time as a post-processing step. "Core-preserving random" means we took the core genome then appended accessory genes to it at random until we hit the expected number of total genes.
 
     The `real` cohort is a reference distribution sampled from the same
     pangenome used for training, not an independent holdout. That is fine for
@@ -62,8 +62,9 @@ def _(Path):
     KEGG_CACHE.mkdir(parents=True, exist_ok=True)
     return DATA_DIR, EVAL_DATA, FBA_DIR, KEGG_CACHE
 
+
 @app.cell
-def _(mo, DATA_DIR, gene_order, np, pl):
+def _(DATA_DIR, gene_order, mo, np, pl):
     _prev_path = DATA_DIR / "gene_prevalence.npy"
     _gene_freq = np.load(_prev_path)
 
@@ -96,7 +97,8 @@ def _(mo, DATA_DIR, gene_order, np, pl):
     )
 
     core_genome_summary_df
-    return core_genome_summary_df, sl_core_mask
+    return
+
 
 @app.cell
 def _(mo):
@@ -939,6 +941,7 @@ def _(DATA_DIR, EVAL_DATA, np, pangenome_genes):
 
     return gene_order, make_random, repair_essentials, v3_continuous
 
+
 @app.cell
 def _(
     iml,
@@ -1003,15 +1006,19 @@ def _(
 @app.cell
 def _(alt, sweep_df):
     alt.Chart(sweep_df.to_pandas()).mark_line(point=True).encode(
-        x=alt.X("genome_size:Q", title="genes per genome", scale=alt.Scale(zero=False)),
+        x=alt.X("genome_size:Q", title="Genome size", scale=alt.Scale(zero=False)),
         y=alt.Y("fba_viable_pct:Q", title="FBA viable (%)"),
         color=alt.Color(
             "source:N",
             scale=alt.Scale(domain=["v3", "random"], range=["#1f77b4", "#d62728"]),
+            legend=alt.Legend(orient='none', legendX=50, legendY=40, direction='horizontal',titleAnchor='middle', labelExpr="datum.label == 'random' ? 'core+random' : datum.label")
         ),
         tooltip=["threshold", "source", "genome_size", "fba_viable_pct", "n_modules_80"],
     ).properties(
-        width=480, height=300, title="Size–viability frontier: v3 vs size-matched random"
+        width=400, height=400, title=""
+    ).configure_axis(
+        labelFontSize=16,    # Size of the tick labels (numbers/categories)
+        titleFontSize=18     # Size of the axis label/description
     )
     return
 
@@ -1107,9 +1114,6 @@ def _(alt, reanalysis_df):
     ).resolve_scale(y="independent").properties(width=170, height=240)
     return
 
-# ---------------------------------------------------------------------
-# 12. Synthetic lethality screen
-# ---------------------------------------------------------------------
 
 @app.cell
 def _(mo):
@@ -1207,11 +1211,18 @@ def _(DATA_DIR, pd):
 
     print(f"Raw BioGRID interaction pairs loaded: {len(sl_raw_pairs_df)}")
     sl_raw_pairs_df.head()
-    return sl_dir, sl_pairs_path, sl_raw_pairs_df
+    return sl_dir, sl_raw_pairs_df
 
 
 @app.cell
-def _(normalize_gene, pangenome_genes, pangenome_to_bnum, sl_raw_pairs_df, pd, re):
+def _(
+    normalize_gene,
+    pangenome_genes,
+    pangenome_to_bnum,
+    pd,
+    re,
+    sl_raw_pairs_df,
+):
     """
     Map BioGRID interaction-pair identifiers onto the pangenome naming system.
 
@@ -1292,68 +1303,11 @@ def _(normalize_gene, pangenome_genes, pangenome_to_bnum, sl_raw_pairs_df, pd, r
         )
 
     sl_pairs_df.head()
-    return sl_pairs_df, sl_pangenome_norm_set, sl_unmapped_pairs_df
+    return sl_pairs_df, sl_pangenome_norm_set
 
-
-# @app.cell
-# def _(
-#     best_size,
-#     best_threshold,
-#     gene_order,
-#     make_random,
-#     repair_essentials,
-#     sample_sources,
-#     v3_continuous,
-#     np,
-# ):
-#     """
-#     Define cohorts for the BioGRID interaction screen.
-
-#     Main analysis:
-#     - v3 genomes decoded at the selected operating point
-
-#     Controls:
-#     - real genomes
-#     - size-matched random genomes
-#     """
-#     sl_v3_best_gene_lists = repair_essentials(
-#         [
-#             gene_order[v3_continuous[_i] > best_threshold].tolist()
-#             for _i in range(v3_continuous.shape[0])
-#         ]
-#     )
-
-#     sl_random_best_gene_lists = repair_essentials(
-#         make_random(best_size, n=100, seed=42)
-#     )
-
-#     sl_cohort_gene_lists = {
-#         "real": [
-#             (_gid, _genes)
-#             for _gid, _genes in sample_sources["real"]
-#         ],
-#         "random_size_matched": [
-#             (f"random_{_i:03d}", _genes)
-#             for _i, _genes in enumerate(sl_random_best_gene_lists)
-#         ],
-#         f"v3_threshold_{best_threshold:.2f}": [
-#             (f"v3_{_i:03d}", _genes)
-#             for _i, _genes in enumerate(sl_v3_best_gene_lists)
-#         ],
-#     }
-
-#     for _sl_cohort_name, _sl_items in sl_cohort_gene_lists.items():
-#         _sl_sizes = [len(_genes) for _, _genes in _sl_items]
-#         print(
-#             f"{_sl_cohort_name}: n={len(_sl_items)}, "
-#             f"mean genes={np.mean(_sl_sizes):.1f}, "
-#             f"min={min(_sl_sizes)}, max={max(_sl_sizes)}"
-#         )
-
-#     return sl_cohort_gene_lists, sl_random_best_gene_lists, sl_v3_best_gene_lists
 
 @app.cell
-def _(sample_sources, np):
+def _(np, sample_sources):
     """
     Define cohorts for the BioGRID interaction screen.
 
@@ -1393,11 +1347,17 @@ def _(sample_sources, np):
             f"mean genes={np.mean(_sl_sizes):.1f}, "
             f"min={min(_sl_sizes)}, max={max(_sl_sizes)}"
         )
+    return (sl_cohort_gene_lists,)
 
-    return sl_cohort_gene_lists
 
 @app.cell
-def _(normalize_gene, pd, sl_cohort_gene_lists, sl_pairs_df, sl_pangenome_norm_set):
+def _(
+    normalize_gene,
+    pd,
+    sl_cohort_gene_lists,
+    sl_pairs_df,
+    sl_pangenome_norm_set,
+):
     """
     Count, for each genome, the number of BioGRID interaction pairs where
     both genes are absent.
@@ -1452,7 +1412,7 @@ def _(normalize_gene, pd, sl_cohort_gene_lists, sl_pairs_df, sl_pangenome_norm_s
     print(f"Total co-deleted BioGRID interaction hits: {len(sl_hit_df)}")
 
     sl_screen_df.head()
-    return sl_codeleted_interaction_hits, sl_hit_df, sl_screen_df
+    return sl_hit_df, sl_screen_df
 
 
 @app.cell
@@ -1495,7 +1455,7 @@ def _(pl, sl_screen_df):
     )
 
     sl_summary_df
-    return sl_summary_df
+    return (sl_summary_df,)
 
 
 @app.cell
@@ -1526,7 +1486,7 @@ def _(alt, sl_screen_df):
     )
 
     sl_hist_chart
-    return sl_hist_chart
+    return
 
 
 @app.cell
@@ -1548,8 +1508,7 @@ def _(sl_dir, sl_hit_df, sl_screen_df, sl_summary_df):
     print(f"- {sl_per_genome_path}")
     print(f"- {sl_hits_path}")
     print(f"- {sl_summary_path}")
-
-    return sl_hits_path, sl_per_genome_path, sl_summary_path
+    return
 
 
 @app.cell
@@ -1578,133 +1537,8 @@ def _(mo, sl_summary_df):
         {sl_summary_df}
         """
     )
-    return sl_manuscript_text
+    return
 
-# @app.cell
-# def _(
-#     gene_order,
-#     make_random,
-#     normalize_gene,
-#     np,
-#     pl,
-#     repair_essentials,
-#     sl_pairs_df,
-#     sl_pangenome_norm_set,
-#     v3_continuous,
-# ):
-#     """
-#     Sweep VAE decode threshold and count co-deleted BioGRID interaction pairs.
-
-#     This mirrors the FBA size-viability frontier:
-#     - For each v3 decode threshold, generate v3 genomes.
-#     - Compute their mean genome size.
-#     - Generate random genomes matched to that mean size.
-#     - Count known BioGRID negative-genetic-interaction pairs where both genes
-#       are absent.
-#     """
-
-#     def _sl_count_codeleted_interactions(_gene_names):
-#         _present = {normalize_gene(_g) for _g in _gene_names}
-#         _absent = sl_pangenome_norm_set - _present
-
-#         return int(
-#             (
-#                 sl_pairs_df["gene_a"].isin(_absent)
-#                 & sl_pairs_df["gene_b"].isin(_absent)
-#             ).sum()
-#         )
-
-#     _sl_grid = [0.30, 0.35, 0.40, 0.42, 0.44, 0.46, 0.48, 0.50]
-#     _sl_sweep_rows = []
-
-#     for _sl_threshold in _sl_grid:
-#         _sl_v3_gene_lists = repair_essentials(
-#             [
-#                 gene_order[v3_continuous[_i] > _sl_threshold].tolist()
-#                 for _i in range(v3_continuous.shape[0])
-#             ]
-#         )
-
-#         _sl_target_size = int(
-#             round(np.mean([len(_genes) for _genes in _sl_v3_gene_lists]))
-#         )
-
-#         _sl_random_gene_lists = repair_essentials(
-#             make_random(_sl_target_size, n=100, seed=42)
-#         )
-
-#         for _sl_source, _sl_gene_lists in (
-#             ("v3", _sl_v3_gene_lists),
-#             ("random", _sl_random_gene_lists),
-#         ):
-#             _sl_counts = np.array(
-#                 [
-#                     _sl_count_codeleted_interactions(_genes)
-#                     for _genes in _sl_gene_lists
-#                 ]
-#             )
-
-#             _sl_sweep_rows.append(
-#                 {
-#                     "threshold": _sl_threshold,
-#                     "source": _sl_source,
-#                     "genome_size": int(
-#                         round(np.mean([len(_genes) for _genes in _sl_gene_lists]))
-#                     ),
-#                     "mean_codeleted_interactions": round(float(np.mean(_sl_counts)), 2),
-#                     "median_codeleted_interactions": round(float(np.median(_sl_counts)), 2),
-#                     "max_codeleted_interactions": int(np.max(_sl_counts)),
-#                     "pct_with_any_codeleted_interaction": round(
-#                         float(100 * np.mean(_sl_counts > 0)), 1
-#                     ),
-#                 }
-#             )
-
-#     sl_sweep_df = pl.DataFrame(_sl_sweep_rows)
-#     sl_sweep_df
-#     return sl_sweep_df
-
-# @app.cell
-# def _(alt, sl_sweep_df):
-#     sl_sweep_chart = (
-#         alt.Chart(sl_sweep_df.to_pandas())
-#         .mark_line(point=True)
-#         .encode(
-#             x=alt.X(
-#                 "genome_size:Q",
-#                 title="genes per genome",
-#                 scale=alt.Scale(zero=False),
-#             ),
-#             y=alt.Y(
-#                 "mean_codeleted_interactions:Q",
-#                 title="mean co-deleted BioGRID interaction pairs",
-#             ),
-#             color=alt.Color(
-#                 "source:N",
-#                 scale=alt.Scale(
-#                     domain=["v3", "random"],
-#                     range=["#1f77b4", "#d62728"],
-#                 ),
-#             ),
-#             tooltip=[
-#                 "threshold",
-#                 "source",
-#                 "genome_size",
-#                 "mean_codeleted_interactions",
-#                 "median_codeleted_interactions",
-#                 "max_codeleted_interactions",
-#                 "pct_with_any_codeleted_interaction",
-#             ],
-#         )
-#         .properties(
-#             width=480,
-#             height=300,
-#             title="Size–interaction burden frontier: v3 vs size-matched random",
-#         )
-#     )
-
-#     sl_sweep_chart
-#     return sl_sweep_chart
 
 @app.cell
 def _(
@@ -1795,7 +1629,8 @@ def _(
 
     sl_sweep_df = pl.DataFrame(_sl_sweep_rows)
     sl_sweep_df
-    return sl_sweep_df
+    return (sl_sweep_df,)
+
 
 @app.cell
 def _(alt, sl_sweep_df):
@@ -1807,7 +1642,7 @@ def _(alt, sl_sweep_df):
         .encode(
             x=alt.X(
                 "genome_size:Q",
-                title="genes per genome",
+                title="",
                 scale=alt.Scale(zero=False),
             ),
             y=alt.Y(
@@ -1821,6 +1656,9 @@ def _(alt, sl_sweep_df):
                     domain=["v3", "random"],
                     range=["#1f77b4", "#d62728"],
                 ),
+                #legend=alt.Legend(
+                #    orient='none', legendX=80, legendY=30, direction='horizontal',titleAnchor='middle',
+                #    labelExpr="datum.label == 'random' ? 'core+random' : datum.label")
             ),
             tooltip=[
                 "threshold",
@@ -1841,7 +1679,7 @@ def _(alt, sl_sweep_df):
         .encode(
             x=alt.X(
                 "genome_size:Q",
-                title="genes per genome",
+                title="Genome size",
                 scale=alt.Scale(zero=False),
             ),
             y=alt.Y(
@@ -1854,6 +1692,9 @@ def _(alt, sl_sweep_df):
                     domain=["v3", "random"],
                     range=["#1f77b4", "#d62728"],
                 ),
+                legend=alt.Legend(
+                    orient='none', legendX=80, legendY=30, direction='horizontal',titleAnchor='middle',
+                    labelExpr="datum.label == 'random' ? 'core+random' : datum.label")
             ),
             tooltip=[
                 "threshold",
@@ -1871,14 +1712,18 @@ def _(alt, sl_sweep_df):
     sl_sweep_chart = (
         alt.layer(_sl_band, _sl_line)
         .properties(
-            width=480,
-            height=300,
-            title="Size–interaction burden frontier: v3 vs size-matched random",
+            width=400,
+            height=400,
+            title="",
+        ).configure_axis(
+            labelFontSize=16,   
+            titleFontSize=18    
         )
     )
 
     sl_sweep_chart
-    return sl_sweep_chart
+    return
+
 
 @app.cell
 def _(sl_dir, sl_sweep_df):
@@ -1886,7 +1731,8 @@ def _(sl_dir, sl_sweep_df):
     sl_sweep_df.write_csv(sl_sweep_path, separator="\t")
 
     print(f"Wrote: {sl_sweep_path}")
-    return sl_sweep_path
+    return
+
 
 if __name__ == "__main__":
     app.run()
