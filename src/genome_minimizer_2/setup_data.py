@@ -19,8 +19,20 @@ TRAINING_FILES = [
     (f"{BUCKET}/data/essential_genes.csv",              "data/essential_genes.csv"),
     (f"{BUCKET}/data/BC4_func_genes_indices.csv",       "data/BC4_func_genes_indices.csv"),
     (f"{BUCKET}/data/GCF_000005845.2.gbff",             "data/GCF_000005845.2.gbff"),
-    # GO annotations, needed by the statistical_analysis notebook's GO enrichment.
+]
+
+# Data read by the analysis notebooks (statistical_analysis, systems_analysis).
+# Lands in data/; not needed for training, so skipped by --training-data-only.
+ANALYSIS_FILES = [
     (f"{BUCKET}/data/kegg/uniprot_eco_go.tsv",          "data/kegg/uniprot_eco_go.tsv"),
+    (f"{BUCKET}/data/kegg/eco_genes.tsv",               "data/kegg/eco_genes.tsv"),
+    (f"{BUCKET}/data/kegg/eco_module_links.tsv",        "data/kegg/eco_module_links.tsv"),
+    (f"{BUCKET}/data/kegg/modules.tsv",                 "data/kegg/modules.tsv"),
+    (f"{BUCKET}/data/fba/iML1515.xml",                  "data/fba/iML1515.xml"),
+    (f"{BUCKET}/data/gene_prevalence.npy",              "data/gene_prevalence.npy"),
+    # In the bucket this sits at data/; the notebook reads it from
+    # data/synthetic_lethality/, so download it straight to that location.
+    (f"{BUCKET}/data/ecoli_synthetic_lethal_pairs.tsv", "data/synthetic_lethality/ecoli_synthetic_lethal_pairs.tsv"),
 ]
 
 # Pre-computed VAE samples (v0–v3) and the random baseline, as read by the notebooks.
@@ -79,6 +91,8 @@ def setup_data(project_root=None, force=False, training_only=False):
     ok = _download(fs, TRAINING_FILES, project_root, force)
 
     if not training_only:
+        print("\nAnalysis data (KEGG / FBA / prevalence / synthetic-lethal):")
+        ok = _download(fs, ANALYSIS_FILES, project_root, force) and ok
         print("\nPre-computed samples (v0–v3, random):")
         ok = _download(fs, SAMPLE_FILES, project_root, force) and ok
 
