@@ -19,6 +19,8 @@ TRAINING_FILES = [
     (f"{BUCKET}/data/essential_genes.csv",              "data/essential_genes.csv"),
     (f"{BUCKET}/data/BC4_func_genes_indices.csv",       "data/BC4_func_genes_indices.csv"),
     (f"{BUCKET}/data/GCF_000005845.2.gbff",             "data/GCF_000005845.2.gbff"),
+    # GO annotations, needed by the statistical_analysis notebook's GO enrichment.
+    (f"{BUCKET}/data/kegg/uniprot_eco_go.tsv",          "data/kegg/uniprot_eco_go.tsv"),
 ]
 
 # Pre-computed VAE samples (v0–v3) and the random baseline, as read by the notebooks.
