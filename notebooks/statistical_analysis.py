@@ -623,6 +623,79 @@ def _(boxplot_data, boxplot_desc_order, plt, sns):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Same distributions, BH-FDR corrected
+
+    The boxplot above plots raw -log₁₀(p). Below, the same top GO terms for v3 are
+    re-plotted as Benjamini–Hochberg q-values: within each genome the p-values are
+    corrected across all GO terms that genome hits (the test family), and we show
+    -log₁₀(q). The dashed line marks the 5% FDR cutoff — boxes to its left are not
+    significant after correction.
+    """)
+    return
+
+
+@app.cell
+def _(boxplot_data, go_enrichment_annot_df, np, pl, plt, sns):
+    # Benjamini-Hochberg q-values, computed per genome across every GO term that
+    # genome hits (the test family), for v3 — then restricted to the same top
+    # terms shown in the p-value boxplot above.
+    def _bh_q(_p):
+        _p = np.asarray(_p, dtype=float)
+        _m = _p.size
+        _o = np.argsort(_p)
+        _ranked = _p[_o] * _m / np.arange(1, _m + 1)
+        _q_sorted = np.minimum.accumulate(_ranked[::-1])[::-1]
+        _q = np.empty(_m)
+        _q[_o] = np.clip(_q_sorted, 0.0, 1.0)
+        return _q
+
+    _parts = []
+    for _grp in go_enrichment_annot_df.filter(pl.col("variant") == "v3").partition_by("sample_id"):
+        # reconstruct p from -log10(p); underflow -> 0 is fine (most significant)
+        _p = np.power(10.0, -_grp["neg_log10_p"].to_numpy())
+        _parts.append(_grp.with_columns(
+            pl.Series("neg_log10_q", -np.log10(np.clip(_bh_q(_p), 1e-323, 1.0)))
+        ))
+    _v3_q = pl.concat(_parts)
+
+    _terms = boxplot_data["go_term"].unique().to_list()
+    _desc = boxplot_data.select(["go_term", "go_description"]).unique()
+    _q_df = (
+        _v3_q.filter(pl.col("go_term").is_in(_terms))
+        .join(_desc, on="go_term", how="left")
+        .to_pandas()
+    )
+    _order = (
+        _q_df.groupby("go_description")["neg_log10_q"].mean()
+        .sort_values(ascending=False).index.tolist()
+    )
+
+    _fig, _ax = plt.subplots(figsize=(10, 6))
+    sns.boxplot(
+        data=_q_df,
+        y="go_description",
+        x="neg_log10_q",
+        order=_order,
+        color="steelblue",
+        fliersize=2,
+        ax=_ax,
+    )
+    _ax.axvline(-np.log10(0.05), color="red", linestyle="--", linewidth=1, label="5% FDR")
+    _ax.legend(loc="lower right")
+    _ax.set_xlabel("-log₁₀(q)  (BH-FDR)", fontsize=12)
+    _ax.set_ylabel("GO Term", fontsize=12)
+    _ax.set_title("Per-Sample GO Enrichment — v3 (BH-FDR q-values)",
+                   fontsize=13, fontweight="bold")
+    _ax.grid(axis="x", alpha=0.3, linestyle="--")
+    _ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.gca()
+    return
+
+
 @app.cell
 def _():
     return
