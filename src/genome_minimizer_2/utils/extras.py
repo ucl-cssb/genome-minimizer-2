@@ -255,6 +255,144 @@ def plot_loss_vs_epochs_graph(epochs, train_loss_vals, val_loss_vals, fig_name):
     plt.close()
 
 
+# Publication styling shared by the component-breakdown figure.
+_PUB_RC = {
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica", "Arial", "DejaVu Sans"],
+    "font.size": 9,
+    "axes.titlesize": 10,
+    "axes.labelsize": 9,
+    "axes.linewidth": 0.8,
+    "axes.edgecolor": "#444444",
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+    "legend.fontsize": 8,
+    "legend.frameon": False,
+    "mathtext.default": "regular",
+}
+
+_TRAIN_COLOR = "#2c3e8c"   # deep blue
+_VAL_COLOR = "#e08214"     # warm orange
+_TEST_COLOR = "#3a8a5f"    # green (test split in distribution panels)
+
+# Order components are laid out in; anything else is appended after these.
+_COMPONENT_ORDER = [
+    "total", "reconstruction", "kl_divergence",
+    "gene_abundance", "l1_regularization", "l2_regularization", "essential_gene",
+]
+
+_PRETTY_NAMES = {
+    "total": "Total loss",
+    "reconstruction": "Reconstruction (BCE)",
+    "kl_divergence": "KL divergence",
+    "gene_abundance": "Gene abundance",
+    "l1_regularization": "L1 regularisation",
+    "l2_regularization": "L2 regularisation",
+    "essential_gene": "Essential-gene",
+}
+
+
+def _pretty_component(name):
+    return _PRETTY_NAMES.get(name, name.replace("_", " ").capitalize())
+
+
+def plot_loss_components(train_losses, val_losses, fig_name, title=None):
+    """
+    Publication-quality breakdown of the VAE training loss into its components.
+
+    Renders one small-multiple panel per active loss component (total,
+    reconstruction, KL divergence, and any extra terms such as gene abundance
+    or L1), each with its own y-scale so terms of very different magnitude stay
+    readable. Train and validation curves share a single figure-level legend.
+
+    Parameters
+    ----------
+    train_losses, val_losses : dict[str, list[float]]
+        Per-epoch loss values keyed by component name, plus a 'total' key — i.e.
+        the LossTracker.train_losses / val_losses dicts produced during training.
+    fig_name : str
+        Output path. The format is inferred from the extension (.pdf, .png, ...).
+    title : str, optional
+        Figure suptitle (e.g. the preset name).
+    """
+    # Keep only components that were actually active (skip all-zero terms like a
+    # disabled L1), but always keep total/reconstruction/KL for context.
+    always = {"total", "reconstruction", "kl_divergence"}
+    ordered = [k for k in _COMPONENT_ORDER if k in train_losses]
+    ordered += [k for k in train_losses if k not in _COMPONENT_ORDER]
+
+    def _active(key):
+        series = train_losses.get(key, [])
+        return key in always or (len(series) > 0 and np.any(np.abs(series) > 1e-9))
+
+    components = [k for k in ordered if _active(k)]
+    if not components:
+        return
+
+    n = len(components)
+    ncols = 2 if n == 4 else min(n, 3)  # 4 terms read better as a balanced 2x2
+    nrows = int(np.ceil(n / ncols))
+
+    with plt.rc_context(_PUB_RC):
+        fig, axes = plt.subplots(
+            nrows, ncols,
+            figsize=(2.9 * ncols, 2.5 * nrows),
+            squeeze=False,
+            constrained_layout=True,
+        )
+        flat_axes = axes.flatten()
+        train_handle = val_handle = None
+
+        for ax, comp in zip(flat_axes, components):
+            tr = np.asarray(train_losses.get(comp, []), dtype=float)
+            va = np.asarray(val_losses.get(comp, []), dtype=float)
+            ep = np.arange(1, len(tr) + 1)
+            # For very short runs markers read better than thin lines.
+            marker = "o" if len(ep) <= 25 else None
+
+            (train_handle,) = ax.plot(
+                ep, tr, color=_TRAIN_COLOR, lw=1.6, marker=marker, ms=3, label="Train",
+            )
+            if len(va) == len(tr) and len(va) > 0:
+                (val_handle,) = ax.plot(
+                    ep, va, color=_VAL_COLOR, lw=1.6, ls="--", marker=marker, ms=3,
+                    label="Validation",
+                )
+
+            ax.set_title(_pretty_component(comp))
+            ax.grid(True, axis="both", ls=":", lw=0.6, alpha=0.45)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.margins(x=0.02)
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(-3, 4))
+
+        # Shared axis labels along the figure edges.
+        for r in range(nrows):
+            axes[r][0].set_ylabel("Loss")
+        for c in range(ncols):
+            axes[nrows - 1][c].set_xlabel("Epoch")
+
+        # Blank any unused panels in the grid.
+        for ax in flat_axes[n:]:
+            ax.set_visible(False)
+
+        handles = [h for h in (train_handle, val_handle) if h is not None]
+        if handles:
+            # "outside lower center" reserves its own space under the panels, so
+            # the legend never overlaps the bottom-row x-axis labels — which it
+            # otherwise does in the short single-row (3-panel) layout.
+            fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
+        if title:
+            fig.suptitle(title, fontsize=11, fontweight="bold")
+
+        fig.savefig(fig_name, bbox_inches="tight")
+        plt.close(fig)
+
+
 # Export all functions
 __all__ = [
     'create_dataloaders',
@@ -268,5 +406,6 @@ __all__ = [
     'l1_regularization',
     'cosine_annealing_schedule',
     'get_latent_variables',
-    'plot_loss_vs_epochs_graph'
+    'plot_loss_vs_epochs_graph',
+    'plot_loss_components'
 ]
